@@ -1,0 +1,60 @@
+# --------------------------------- Top level -------------------------------- #
+BasedOnStyle: Google
+IndentWidth: 2
+ColumnLimit: 100
+
+# --------------------------------- Alignment -------------------------------- #
+DerivePointerAlignment: false
+PointerAlignment: Right
+ReferenceAlignment: Pointer
+AlignOperands: Align
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 1
+
+# -------------------------------- SingleLine -------------------------------- #
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortCompoundRequirementOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+AllowShortNamespacesOnASingleLine: false
+
+# -------------------------------- BinPacking -------------------------------- #
+BinPackArguments: true
+# BinPackLongBracedList: true
+BinPackParameters: BinPack
+
+# ----------------------------------- Break ---------------------------------- #
+BreakAfterAttributes: Always
+BreakBeforeBraces: Attach # K&R
+# BreakBeforeCloseBracketFunction: true
+# BreakBeforeCloseBracketBracedList: true
+# BreakBeforeCloseBracketIf: true
+# BreakBeforeCloseBracketLoop: true
+# BreakBeforeCloseBracketSwitch: true
+# BreakBeforeConceptDeclarations: Always
+# BreakBeforeTemplateCloser: true
+# BreakBeforeTernaryOperators: true
+# BreakConstructorInitializers: AfterColon
+# BreakTemplateDeclarations: Yes
+
+
+# ---------------------------------- Include --------------------------------- #
+IncludeBlocks: Preserve
+
+# ---------------------------------- Indent ---------------------------------- #
+IndentGotoLabels: true
+IndentPPDirectives: BeforeHash
+
+# -------------------------------- EmptyLines -------------------------------- #
+# KeepEmptylines: 
+#  AtEndOfFile: false
+#  AtStartOfBlock: false
+# AtStartOfFile: false
+
+
+

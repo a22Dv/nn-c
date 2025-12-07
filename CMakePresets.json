@@ -1,0 +1,54 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "config-debug",
+            "displayName": "Configuration (Debug)",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+            "binaryDir": "./build/debug/",
+            "generator": "Ninja", 
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "config-release-dbinfo",
+            "displayName": "Configuration (Release-DebugInfo)",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+            "binaryDir": "./build/debug/",
+            "generator": "Ninja", 
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+            }
+        },
+        {
+            "name": "config-release",
+            "displayName": "Configuration (Release)",
+            "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+            "binaryDir": "./build/debug/",
+            "generator": "Ninja", 
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "build-debug",
+            "configurePreset": "config-debug"
+        },
+        {
+            "name": "build-release-dbinfo",
+            "displayName": "Build (Release-DebugInfo)",
+            "configurePreset": "config-release"
+        },
+        {
+            "name": "build-release",
+            "displayName": "Build (Release)",
+            "configurePreset": "config-release"
+        }
+    ]
+}

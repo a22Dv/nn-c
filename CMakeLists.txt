@@ -40,7 +40,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include"
 target_link_libraries(${PROJECT_NAME} PRIVATE) # No-op by default.
 
 # Compile definitions/options
-set(BASE_COMPILE_OPTIONS /WX /W4 /permissive-) 
+set(BASE_COMPILE_OPTIONS /WX /W4) 
 
 if (PROJECT_LANGUAGE STREQUAL "CXX")
     list(APPEND BASE_COMPILE_OPTIONS /EHsc) # Exception support.

@@ -8,6 +8,7 @@
             "binaryDir": "./build/debug/",
             "generator": "Ninja", 
             "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-cl",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
@@ -19,6 +20,7 @@
             "binaryDir": "./build/debug/",
             "generator": "Ninja", 
             "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-cl",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_BUILD_TYPE": "RelWithDebInfo"
             }
@@ -30,6 +32,7 @@
             "binaryDir": "./build/debug/",
             "generator": "Ninja", 
             "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-cl",
                 "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
                 "CMAKE_BUILD_TYPE": "Release"
             }

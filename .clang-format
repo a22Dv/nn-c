@@ -22,15 +22,19 @@ AllowShortIfStatementsOnASingleLine: Never
 AllowShortLambdasOnASingleLine: Inline
 AllowShortLoopsOnASingleLine: false
 AllowShortNamespacesOnASingleLine: false
+AlignAfterOpenBracket: BlockIndent # clang-format <v22.
 
 # -------------------------------- BinPacking -------------------------------- #
-BinPackArguments: true
-# BinPackLongBracedList: true
-BinPackParameters: BinPack
+BinPackArguments: false
+BinPackParameters: OnePerLine
 
 # ----------------------------------- Break ---------------------------------- #
 BreakAfterAttributes: Always
 BreakBeforeBraces: Attach # K&R
+BreakConstructorInitializers: AfterColon
+BreakTemplateDeclarations: Yes
+
+# clang-format v22 required
 # BreakBeforeCloseBracketFunction: true
 # BreakBeforeCloseBracketBracedList: true
 # BreakBeforeCloseBracketIf: true
@@ -39,8 +43,7 @@ BreakBeforeBraces: Attach # K&R
 # BreakBeforeConceptDeclarations: Always
 # BreakBeforeTemplateCloser: true
 # BreakBeforeTernaryOperators: true
-# BreakConstructorInitializers: AfterColon
-# BreakTemplateDeclarations: Yes
+
 
 
 # ---------------------------------- Include --------------------------------- #
@@ -49,12 +52,6 @@ IncludeBlocks: Preserve
 # ---------------------------------- Indent ---------------------------------- #
 IndentGotoLabels: true
 IndentPPDirectives: BeforeHash
-
-# -------------------------------- EmptyLines -------------------------------- #
-# KeepEmptylines: 
-#  AtEndOfFile: false
-#  AtStartOfBlock: false
-# AtStartOfFile: false
 
 
 

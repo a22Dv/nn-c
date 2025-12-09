@@ -7,6 +7,8 @@
  *
  * Implementations rely on the fact that TENSOR_MAX_RANK = 2.
  * Higher dimensional tensors are not supported.
+ *
+ * TODO: Implement gradient MSE.
  */
 
 #include <math.h>
@@ -28,6 +30,7 @@ typedef enum {
   TENSOR_CONTRACT_INCOMPATIBLE
 } tensor_compatible_t;
 
+// Checks if either A or B can be broadcasted to the other.
 tensor_compatible_t tensor_broadcast_compatible(const tensor_t *a, const tensor_t *b) {
   REQUIRE(a && b, return TENSOR_BROADCAST_INCOMPATIBLE);
   tensor_compatible_t cmpt = TENSOR_BROADCAST_INCOMPATIBLE;
@@ -72,6 +75,7 @@ tensor_compatible_t tensor_broadcast_compatible(const tensor_t *a, const tensor_
   return cmpt;
 }
 
+// Checks if both tensors supports contraction.
 tensor_compatible_t tensor_contract_compatible(const tensor_t *a, const tensor_t *b) {
   REQUIRE(a && b, return TENSOR_CONTRACT_INCOMPATIBLE);
   const tensor_rank_data_t *min_rank_data = NULL;
@@ -109,6 +113,7 @@ tensor_compatible_t tensor_contract_compatible(const tensor_t *a, const tensor_t
   return cmpt ? TENSOR_CONTRACT_COMPATIBLE : TENSOR_CONTRACT_INCOMPATIBLE;
 }
 
+// Broadcasts strides on either A or B. (Sets specified strides to 0).
 tensor_compatible_t tensor_broadcast_strides(
     const tensor_t *a,
     const tensor_t *b,
@@ -176,16 +181,21 @@ void tensor_destroy(tensor_t **tensor) {
   *tensor = NULL;
 }
 
-tensor_t *tensor_contract(const tensor_t *a, const tensor_t *b) {
+tensor_t *tensor_contract(
+    tensor_t *restrict dst, const tensor_t *restrict a, const tensor_t *restrict b
+) {
   REQUIRE(a && b, return NULL);
+  REQUIRE(dst != a && dst != b, return NULL);
   REQUIRE(tensor_contract_compatible(a, b) == TENSOR_CONTRACT_COMPATIBLE, return NULL);
 
-  tensor_size_t contract_axis_size = TENSOR_SHAPE(a, 0);
-  tensor_t *tensor_r = tensor_create(
-      max(a->rank, b->rank), TENSOR_DECLARE_SHAPE(TENSOR_SHAPE(b, 0), TENSOR_SHAPE(a, 1))
-  );
+  const tensor_size_t shape[TENSOR_MAX_RANK] = {TENSOR_SHAPE(b, 0), TENSOR_SHAPE(a, 1)};
+  const tensor_size_t contract_axis_size = TENSOR_SHAPE(a, 0);
+  tensor_t *tensor_r = dst ? dst : tensor_create(max(a->rank, b->rank), shape);
   REQUIRE(tensor_r, return NULL);
-  
+  REQUIRE(
+      TENSOR_SHAPE(tensor_r, 0) == shape[0] && TENSOR_SHAPE(tensor_r, 1) == shape[1], return NULL
+  );
+
   for (tensor_size_t i = 0; i < TENSOR_SHAPE(tensor_r, 1); ++i) {
     for (tensor_size_t j = 0; j < TENSOR_SHAPE(tensor_r, 0); ++j) {
       tensor_type_t point = 0.0;
@@ -194,7 +204,7 @@ tensor_t *tensor_contract(const tensor_t *a, const tensor_t *b) {
         const tensor_size_t bi = k * TENSOR_STRIDE(b, 1) + j * TENSOR_STRIDE(b, 0);
         point += a->data[ai] * b->data[bi];
       }
-      tensor_r->data[i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(a, 0)] = point;
+      tensor_r->data[i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(tensor_r, 0)] = point;
     }
   }
   return tensor_r;
@@ -204,7 +214,7 @@ tensor_t *tensor_contract(const tensor_t *a, const tensor_t *b) {
   REQUIRE(a &&b, return NULL);                                                                    \
   tensor_rank_data_t a_stride[TENSOR_MAX_RANK] = {};                                              \
   tensor_rank_data_t b_stride[TENSOR_MAX_RANK] = {};                                              \
-  tensor_compatible_t cmpt = tensor_broadcast_strides(a, b, a_stride, b_stride);                  \
+  const tensor_compatible_t cmpt = tensor_broadcast_strides(a, b, a_stride, b_stride);            \
   REQUIRE(cmpt != TENSOR_BROADCAST_INCOMPATIBLE, return NULL);                                    \
                                                                                                   \
   tensor_size_t shape[TENSOR_MAX_RANK] = {};                                                      \
@@ -212,44 +222,52 @@ tensor_t *tensor_contract(const tensor_t *a, const tensor_t *b) {
     shape[i] = max(TENSOR_SHAPE(a, i), TENSOR_SHAPE(b, i));                                       \
   }                                                                                               \
                                                                                                   \
-  tensor_t *tensor_r = tensor_create(max(a->rank, b->rank), shape);                               \
+  tensor_t *tensor_r = dst ? dst : tensor_create(max(a->rank, b->rank), shape);                   \
   REQUIRE(tensor_r, return NULL);                                                                 \
-                                                                                                  \
+  REQUIRE(                                                                                        \
+      TENSOR_SHAPE(tensor_r, 0) == shape[0] && TENSOR_SHAPE(tensor_r, 1) == shape[1], return NULL \
+  );                                                                                              \
   for (tensor_size_t i = 0; i < tensor_r->rank_data[1].shape; ++i) {                              \
     for (tensor_size_t j = 0; j < tensor_r->rank_data[0].shape; ++j) {                            \
-      tensor_type_t av = a->data[i * a_stride[1].stride + j * a_stride[0].stride];                \
-      tensor_type_t bv = b->data[i * b_stride[1].stride + j * b_stride[0].stride];                \
+      const tensor_type_t av = a->data[i * a_stride[1].stride + j * a_stride[0].stride];          \
+      const tensor_type_t bv = b->data[i * b_stride[1].stride + j * b_stride[0].stride];          \
       tensor_r->data[i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(tensor_r, 0)] = av op bv; \
     }                                                                                             \
   }                                                                                               \
   return tensor_r;
 
-tensor_t *tensor_emul(const tensor_t *a, const tensor_t *b) {
+tensor_t *tensor_emul(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
   _TENSOR_E_2D_IMPL(*);
 }
 
-tensor_t *tensor_eadd(const tensor_t *a, const tensor_t *b) {
+tensor_t *tensor_eadd(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
   _TENSOR_E_2D_IMPL(+);
 }
 
-tensor_t *tensor_esub(const tensor_t *a, const tensor_t *b) {
+tensor_t *tensor_esub(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
   _TENSOR_E_2D_IMPL(-);
 }
 
-tensor_t *tensor_ediv(const tensor_t *a, const tensor_t *b) {
+tensor_t *tensor_ediv(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
   _TENSOR_E_2D_IMPL(/);
 }
 
-tensor_t *tensor_emap(const tensor_t *a, tensor_type_t (*f)(tensor_type_t)) {
+tensor_t *tensor_emap(tensor_t *dst, const tensor_t *a, tensor_type_t (*f)(tensor_type_t)) {
   REQUIRE(a && f, return NULL);
   tensor_t *tensor_r =
-      tensor_create(a->rank, TENSOR_DECLARE_SHAPE(TENSOR_SHAPE(a, 0), TENSOR_SHAPE(a, 1)));
+      dst ? dst
+          : tensor_create(a->rank, TENSOR_DECLARE_SHAPE(TENSOR_SHAPE(a, 0), TENSOR_SHAPE(a, 1)));
   REQUIRE(tensor_r, return NULL);
+  REQUIRE(
+      TENSOR_SHAPE(tensor_r, 0) == TENSOR_SHAPE(a, 0) &&
+          TENSOR_SHAPE(tensor_r, 1) == TENSOR_SHAPE(a, 1),
+      return NULL
+  );
 
   for (tensor_size_t i = 0; i < TENSOR_SHAPE(tensor_r, 1); ++i) {
     for (tensor_size_t j = 0; j < TENSOR_SHAPE(tensor_r, 0); ++j) {
       tensor_size_t ti = i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(tensor_r, 0);
-      tensor_size_t ai = i * TENSOR_STRIDE(a, 0) + j * TENSOR_STRIDE(a, 1);
+      tensor_size_t ai = i * TENSOR_STRIDE(a, 1) + j * TENSOR_STRIDE(a, 0);
       tensor_type_t val = a->data[ai];
       tensor_r->data[ti] = f(val);
     }
@@ -257,11 +275,24 @@ tensor_t *tensor_emap(const tensor_t *a, tensor_type_t (*f)(tensor_type_t)) {
   return tensor_r;
 }
 
-tensor_t *tensor_transpose(tensor_t *a) {
-  tensor_size_t shape[TENSOR_MAX_RANK] = {TENSOR_SHAPE(a, 1), TENSOR_SHAPE(a, 0)};
+tensor_t *tensor_transpose(tensor_t *dst, tensor_t *a) {
+  const tensor_size_t shape[TENSOR_MAX_RANK] = {TENSOR_SHAPE(a, 1), TENSOR_SHAPE(a, 0)};
 
-  // When rank is 1, transposition promotes it to rank 2, else its the minimum.
-  tensor_t *transposed = tensor_create(shape[1] != 1 ? 2 : min(a->rank, 1), shape);
+  // When dimension[1] is not 1, transposition promotes it to rank 2.
+  tensor_t *transposed = dst ? dst : tensor_create(shape[1] != 1 ? 2 : a->rank, shape);
+  REQUIRE(
+      TENSOR_SHAPE(transposed, 0) == shape[0] && TENSOR_SHAPE(transposed, 1) == shape[1],
+      return NULL
+  );
+
+  if (transposed == a) {  // Handle inplace.
+    tensor_rank_data_t tmp = a->rank_data[0];
+    a->rank_data[0] = a->rank_data[1];
+    a->rank_data[1] = tmp;
+    a->rank = shape[1] != 1 ? 2 : a->rank;
+    return a;
+  }
+
   for (tensor_size_t i = 0; i < TENSOR_SHAPE(a, 1); ++i) {
     for (tensor_size_t j = 0; j < TENSOR_SHAPE(a, 0); ++j) {
       tensor_size_t ai = i * TENSOR_STRIDE(a, 1) + j * TENSOR_STRIDE(a, 0);
@@ -271,12 +302,6 @@ tensor_t *tensor_transpose(tensor_t *a) {
   }
   return transposed;
 }
-
-void tensor_transpose_inplace(tensor_t *a) {
-  tensor_rank_data_t tmp = a->rank_data[0];
-  a->rank_data[0] = a->rank_data[1];
-  a->rank_data[1] = tmp;
-};
 
 tensor_type_t sigmoid(tensor_type_t x) {
   return (tensor_type_t)(1.0 / (1.0 + exp(-x)));
@@ -301,6 +326,11 @@ tensor_type_t relu_dx(tensor_type_t x) {
 
 tensor_type_t leaky_relu_dx(tensor_type_t x) {
   return (tensor_type_t)(x > 0.0 ? 1.0 : 0.01);
+}
+
+tensor_type_t zeroes(tensor_type_t x) {
+  (void)x;
+  return 0;
 }
 
 void dbg_tensor_print(tensor_t *tensor) {

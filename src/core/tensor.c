@@ -381,7 +381,7 @@ void dbg_tensor_print(tensor_t *tensor) {
     for (tensor_size_t j = 0; j < TENSOR_SHAPE(tensor, 0); ++j) {
       tensor_size_t it = i * TENSOR_STRIDE(tensor, 1) + j * TENSOR_STRIDE(tensor, 0);
       tensor_type_t val = tensor->data[it];
-      printf("%.1f ", val);
+      printf("%.5f ", val);
     }
     printf("\n");
   }

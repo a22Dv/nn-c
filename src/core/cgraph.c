@@ -32,7 +32,7 @@ cnode_t *cnode_create(
   node->type = type;
 
   for (tensor_size_t i = 0; i < CN_MAX_INDEGREE; ++i) {
-    node->prev[i] = i < parents ? prev[i] : NULL;
+    node->prev[i] = i < parents && prev ? prev[i] : NULL;
     if (!node->prev[i]) {
       continue;
     }
@@ -48,7 +48,7 @@ cnode_t *cnode_create(
     REQUIRE(set, goto failure);
   }
   for (tensor_size_t i = 0; i < CN_MAX_OUTDEGREE; ++i) {
-    node->next[i] = i < children ? next[i] : NULL;
+    node->next[i] = i < children && next ? next[i] : NULL;
     if (!node->next[i]) {
       continue;
     }
@@ -186,10 +186,10 @@ bool cnode_traverse_gradient(cnode_t *tail) {
     return true;
   }
 
-  tensor_t *y1g = tail->prev[0]->gradient;
-  tensor_t *y2g = tail->prev[1]->gradient;
-  tensor_t *y1 = tail->prev[0]->data;
-  tensor_t *y2 = tail->prev[1]->data;
+  tensor_t *y1g = tail->prev[0] ? tail->prev[0]->gradient : NULL;
+  tensor_t *y2g = tail->prev[1] ? tail->prev[1]->gradient : NULL;
+  tensor_t *y1 = tail->prev[0] ? tail->prev[0]->data : NULL;
+  tensor_t *y2 = tail->prev[1] ? tail->prev[1]->data : NULL;
   tensor_t *g = tail->gradient;
   tensor_t *d = tail->data;
 
@@ -273,13 +273,13 @@ bool cnode_traverse_gradient(cnode_t *tail) {
   return ops;
 }
 
-void cnode_reset_gradient(cnode_t *head) {
+void cnode_reset_gradients(cnode_t *head) {
   if (head == NULL) {
     return;
   }
   tensor_emap(head->gradient, head->gradient, zeroes);
   for (tensor_size_t i = 0; i < CN_MAX_OUTDEGREE; ++i) {
-    cnode_reset_data(head->next[i]);
+    cnode_reset_gradients(head->next[i]);
   }
 }
 

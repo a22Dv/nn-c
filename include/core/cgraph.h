@@ -7,7 +7,7 @@
 #pragma once
 
 #define CN_MAX_INDEGREE 2
-#define CN_MAX_OUTDEGREE 2
+#define CN_MAX_OUTDEGREE 1
 
 #include "core/tensor.h"
 

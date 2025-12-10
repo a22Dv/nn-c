@@ -129,46 +129,42 @@ bool cnode_traverse_and_perform(cnode_t *head) {
   if (head == NULL) {
     return true;
   }
+  cnode_t *p1 = head->prev[0];
+  cnode_t *p2 = head->prev[1];
+  tensor_t *y1 = p1 ? p1->data : NULL;
+  tensor_t *y2 = p2 ? p2->data : NULL;
+  tensor_t *d = head->data;
+
   switch (head->type) {
     case CN_ADD:
-      REQUIRE(head->prev[0] && head->prev[1], return false);
-      REQUIRE(tensor_eadd(head->data, head->prev[0]->data, head->prev[1]->data), return false);
+      REQUIRE(tensor_eadd(d, y1, y2), return false);
       break;
     case CN_SUB:
-      REQUIRE(head->prev[0] && head->prev[1], return false);
-      REQUIRE(tensor_esub(head->data, head->prev[0]->data, head->prev[1]->data), return false);
+      REQUIRE(tensor_esub(d, y1, y2), return false);
       break;
     case CN_MUL:
-      REQUIRE(head->prev[0] && head->prev[1], return false);
-      REQUIRE(tensor_emul(head->data, head->prev[0]->data, head->prev[1]->data), return false);
+      REQUIRE(tensor_emul(d, y1, y2), return false);
       break;
     case CN_DIV:
-      REQUIRE(head->prev[0] && head->prev[1], return false);
-      REQUIRE(tensor_ediv(head->data, head->prev[0]->data, head->prev[1]->data), return false);
+      REQUIRE(tensor_ediv(d, y1, y2), return false);
       break;
     case CN_CONTRACT:
-      REQUIRE(head->prev[0] && head->prev[1], return false);
-      REQUIRE(tensor_contract(head->data, head->prev[0]->data, head->prev[1]->data), return false);
+      REQUIRE(tensor_contract(d, y1, y2), return false);
       break;
     case CN_MSE:
-      REQUIRE(head->prev[0] && head->prev[1], return false);
-      REQUIRE(tensor_mse(head->data, head->prev[0]->data, head->prev[1]->data), return false);
+      REQUIRE(tensor_mse(d, y1, y2), return false);
       break;
     case CN_LEAKY_RELU:
-      REQUIRE(head->prev[0], return false);
-      REQUIRE(tensor_emap(head->data, head->prev[0]->data, leaky_relu), return false);
+      REQUIRE(tensor_emap(d, y1, leaky_relu), return false);
       break;
     case CN_RELU:
-      REQUIRE(head->prev[0], return false);
-      REQUIRE(tensor_emap(head->data, head->prev[0]->data, relu), return false);
+      REQUIRE(tensor_emap(d, y1, relu), return false);
       break;
     case CN_SIGMOID:
-      REQUIRE(head->prev[0], return false);
-      REQUIRE(tensor_emap(head->data, head->prev[0]->data, sigmoid), return false);
+      REQUIRE(tensor_emap(d, y1, sigmoid), return false);
       break;
     case CN_TRANSPOSE:
-      REQUIRE(head->prev[0], return false);
-      REQUIRE(tensor_transpose(head->data, head->prev[0]->data), return false);
+      REQUIRE(tensor_transpose(d, y1), return false);
       break;
     case CN_DATA:  // No-op.
       break;
@@ -185,35 +181,84 @@ bool cnode_traverse_and_perform(cnode_t *head) {
   return ops;
 }
 
-
-/// TODO: Implementation.
-/// NOTE: Equation comments do not use standard notation. Just for reference.
 bool cnode_traverse_gradient(cnode_t *tail) {
   if (tail == NULL) {
     return true;
   }
+
+  tensor_t *y1g = tail->prev[0]->gradient;
+  tensor_t *y2g = tail->prev[1]->gradient;
+  tensor_t *y1 = tail->prev[0]->data;
+  tensor_t *y2 = tail->prev[1]->data;
+  tensor_t *g = tail->gradient;
+  tensor_t *d = tail->data;
+
   switch (tail->type) {
-    case CN_ADD: // 𝛛L/𝛛a = 𝛁, 𝛛L/𝛛b = 𝛁
+    case CN_ADD:  // 𝛛L/𝛛a = 𝛁, 𝛛L/𝛛b = 𝛁
+      REQUIRE(tensor_eadd(y1g, y1g, g), return false);
+      REQUIRE(tensor_eadd(y2g, y2g, g), return false);
       break;
-    case CN_SUB: // 𝛛L/𝛛a = 𝛁, 𝛛L/𝛛b = -𝛁
+    case CN_SUB:  // 𝛛L/𝛛a = 𝛁, 𝛛L/𝛛b = -𝛁
+      REQUIRE(tensor_eadd(y1g, y1g, g), return false);
+      REQUIRE(tensor_esub(y2g, y2g, g), return false);
       break;
-    case CN_MUL: // 𝛛L/𝛛a = 𝛁b, 𝛛L/𝛛b = 𝛁a
+    case CN_MUL:  // 𝛛L/𝛛a = 𝛁b, 𝛛L/𝛛b = 𝛁a
+      REQUIRE(tensor_eadd(y1g, y1g, g), return false);
+      REQUIRE(tensor_eadd(y2g, y2g, g), return false);
+      REQUIRE(tensor_emul(y1g, y1g, y2), return false);
+      REQUIRE(tensor_emul(y2g, y2g, y1), return false);
       break;
-    case CN_DIV: // 𝛛L/𝛛a = 𝛁(1/b), 𝛛L/𝛛b = 𝛁(-a/b^2)
+    case CN_DIV:  // 𝛛L/𝛛a = 𝛁(1/b), 𝛛L/𝛛b = 𝛁(-a/b^2)
+      tensor_t *one = tensor_create(0, TENSOR_DECLARE_SHAPE(1, 1));
+      REQUIRE(one, return false);
+      one->data[0] = 1;
+
+      REQUIRE(tensor_eadd(y1g, y1g, one), return false);
+      REQUIRE(tensor_ediv(y1g, y1g, y2), return false);
+      REQUIRE(tensor_emul(y1g, y1g, g), return false);
+
+      REQUIRE(tensor_esub(y2g, y2g, y1), return false);
+      REQUIRE(tensor_ediv(y2g, y2g, y2), return false);
+      REQUIRE(tensor_ediv(y2g, y2g, y2), return false);
+      REQUIRE(tensor_emul(y2g, y2g, g), return false);
+      tensor_destroy(&one);
       break;
-    case CN_CONTRACT: // 𝛛L/𝛛a = 𝛁(b^T),  𝛛L/𝛛b = (a^T)𝛁
+    case CN_CONTRACT:  // 𝛛L/𝛛a = 𝛁(b^T),  𝛛L/𝛛b = (a^T)𝛁
+      tensor_t* y1t = tensor_transpose(NULL, y1);
+      tensor_t* y2t = tensor_transpose(NULL, y2);
+      REQUIRE(y1t, return false);
+      REQUIRE(y2t, return false);
+      REQUIRE(tensor_contract(y1g, g, y2t), return false);
+      REQUIRE(tensor_contract(y2g, y1t, g), return false);
+      tensor_destroy(&y1t);
+      tensor_destroy(&y2t);
       break;
-    case CN_MSE: // 𝛛L/𝛛a = 2(y1-y2)/n, 𝛛L/𝛛L = 1
+    case CN_MSE:       // 𝛛L/𝛛a = 2/n * (y1-y2), 𝛛L/𝛛L = 1
+      tensor_t *scalar = tensor_create(0, TENSOR_DECLARE_SHAPE(1, 1));
+      REQUIRE(scalar, return false);
+      scalar->data[0] = 2.0f / TENSOR_SHAPE(y1, 1);
+
+      REQUIRE(tensor_esub(y1g, y1, y2), return false);
+      REQUIRE(tensor_emul(y1g, y1g, scalar), return false);
+      REQUIRE(tensor_emul(y1g, y1g, g), return false);  // Implicit 1.
+      tensor_destroy(&scalar);
       break;
-    case CN_LEAKY_RELU: // 𝛛L/𝛛a = 𝛁 > 0 -> 1, 𝛁 <= 0 -> 0.01
+    case CN_LEAKY_RELU:  // 𝛛L/𝛛a = 𝛁 > 0 -> 1, 𝛁 <= 0 -> 0.01
+      REQUIRE(tensor_emap(y1g, d, leaky_relu_dx), return false);
+      REQUIRE(tensor_emul(y1g, y1g, g), return false);
       break;
-    case CN_RELU: // 𝛛L/𝛛a = 𝛁 > 0 -> 1, 𝛁 <= 0 -> 0
+    case CN_RELU:  // 𝛛L/𝛛a = 𝛁 > 0 -> 1, 𝛁 <= 0 -> 0
+      REQUIRE(tensor_emap(y1g, d, relu_dx), return false);
+      REQUIRE(tensor_emul(y1g, y1g, g), return false);
       break;
-    case CN_SIGMOID: // 𝛛L/𝛛a = (e^(-𝛁))(1+e^(-𝛁))^2
+    case CN_SIGMOID:  // 𝛛L/𝛛a = (e^(-𝛁))(1+e^(-𝛁))^2
+      REQUIRE(tensor_emap(y1g, d, sigmoid_dx), return false);
+      REQUIRE(tensor_emul(y1g, y1g, g), return false);
       break;
-    case CN_TRANSPOSE: // 𝛛L/𝛛a = 𝛁^T
+    case CN_TRANSPOSE:  // 𝛛L/𝛛a = 𝛁^T
+      REQUIRE(tensor_transpose(y1g, g), return false);
       break;
-    case CN_DATA: // No-op.
+    case CN_DATA:  // No-op.
       break;
   }
   bool ops = true;

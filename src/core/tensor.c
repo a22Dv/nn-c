@@ -7,8 +7,6 @@
  *
  * Implementations rely on the fact that TENSOR_MAX_RANK = 2.
  * Higher dimensional tensors are not supported.
- *
- * TODO: Implement gradient MSE.
  */
 
 #include <math.h>
@@ -224,9 +222,9 @@ tensor_t *tensor_contract(
                                                                                                   \
   tensor_t *tensor_r = dst ? dst : tensor_create(max(a->rank, b->rank), shape);                   \
   REQUIRE(tensor_r, return NULL);                                                                 \
-  REQUIRE(                                                                                        \
-      TENSOR_SHAPE(tensor_r, 0) == shape[0] && TENSOR_SHAPE(tensor_r, 1) == shape[1], return NULL \
-  );                                                                                              \
+  REQUIRE(TENSOR_SHAPE(tensor_r, 0) == shape[0] && TENSOR_SHAPE(tensor_r, 1) == shape[1],         \
+          !dst ? tensor_destroy(&tensor_r) : (void)0;                                             \
+          return NULL);                                                                           \
   for (tensor_size_t i = 0; i < tensor_r->rank_data[1].shape; ++i) {                              \
     for (tensor_size_t j = 0; j < tensor_r->rank_data[0].shape; ++j) {                            \
       const tensor_type_t av = a->data[i * a_stride[1].stride + j * a_stride[0].stride];          \
@@ -303,6 +301,48 @@ tensor_t *tensor_transpose(tensor_t *dst, tensor_t *a) {
   return transposed;
 }
 
+tensor_t *tensor_mse(
+    tensor_t *restrict dst, const tensor_t *restrict output, const tensor_t *restrict expected
+) {
+  REQUIRE(output && expected, return NULL);
+  REQUIRE(output->rank == expected->rank, return NULL);
+
+  tensor_t *n = NULL;
+  tensor_t *diff = NULL;
+  tensor_t *mse = dst ? dst : tensor_create(0, TENSOR_DECLARE_SHAPE(1, 1));
+  REQUIRE(TENSOR_SHAPE(mse, 0) == 1 && TENSOR_SHAPE(mse, 1) == 1 && mse->rank == 0, goto failure);
+
+  REQUIRE(diff = tensor_esub(NULL, output, expected), goto failure);
+
+  REQUIRE(tensor_emap(diff, diff, squared), goto failure);
+
+  for (tensor_size_t i = 0; i < TENSOR_SHAPE(diff, 1); ++i) {
+    for (tensor_size_t j = 0; j < TENSOR_SHAPE(diff, 0); ++j) {
+      const tensor_size_t id = i * TENSOR_STRIDE(diff, 1) + j * TENSOR_STRIDE(diff, 0);
+      mse->data[0] += diff->data[id];
+    }
+  }
+
+  n = tensor_create(0, TENSOR_DECLARE_SHAPE(1, 1));
+  REQUIRE(n, goto failure);
+  n->data[0] = TENSOR_SHAPE(output, 1);
+  REQUIRE(tensor_ediv(mse, mse, n), goto failure);
+  tensor_destroy(&n);
+  tensor_destroy(&diff);
+  return mse;
+failure:
+  if (!dst) {
+    tensor_destroy(&mse);
+  }
+  if (n) {
+    tensor_destroy(&n);
+  }
+  if (diff) {
+    tensor_destroy(&diff);
+  }
+  return NULL;
+}
+
 tensor_type_t sigmoid(tensor_type_t x) {
   return (tensor_type_t)(1.0 / (1.0 + exp(-x)));
 }
@@ -316,8 +356,7 @@ tensor_type_t leaky_relu(tensor_type_t x) {
 }
 
 tensor_type_t sigmoid_dx(tensor_type_t x) {
-  tensor_type_t ex = (tensor_type_t)exp(-x);
-  return (tensor_type_t)(ex * pow((1.0 + ex), -2.0));
+  return (tensor_type_t)(x * (1 - x));  // x is defined as the output of sigmoid(x).
 }
 
 tensor_type_t relu_dx(tensor_type_t x) {
@@ -331,6 +370,10 @@ tensor_type_t leaky_relu_dx(tensor_type_t x) {
 tensor_type_t zeroes(tensor_type_t x) {
   (void)x;
   return 0;
+}
+
+tensor_type_t squared(tensor_type_t x) {
+  return x * x;
 }
 
 void dbg_tensor_print(tensor_t *tensor) {

@@ -68,9 +68,11 @@ tensor_t *tensor_emap(tensor_t *dst, const tensor_t *a, tensor_type_t (*f)(tenso
 // Swaps metadata if a == dst. If not, result is stored on dst if dst != NULL.
 tensor_t *tensor_transpose(tensor_t *dst, tensor_t *a);
 
-// Calculates the mean-squared error from a given output and expected output. 
-// This returns a scalar value.
+// Calculates the mean-squared error from a given output and expected output. Outputs a scalar.
 tensor_t *tensor_mse(tensor_t *restrict dst, const tensor_t *restrict output, const tensor_t *restrict expected);
+
+// Calculates the derivative of the mean-squared error.
+tensor_t *tensor_mse_dx(tensor_t *restrict dst, const tensor_t *restrict output, const tensor_t *restrict expected);
 
 tensor_type_t sigmoid(tensor_type_t x);
 tensor_type_t relu(tensor_type_t x);
@@ -85,7 +87,10 @@ tensor_type_t relu_dx(tensor_type_t x);
 // Leaky ReLU derivative.
 tensor_type_t leaky_relu_dx(tensor_type_t x);
 
-// Always returns 0.
+// Returns 0.
 tensor_type_t zeroes(tensor_type_t x);
+
+// Returns x^2.
+tensor_type_t squared(tensor_type_t x);
 
 void dbg_tensor_print(tensor_t *tensor);

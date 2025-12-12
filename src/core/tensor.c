@@ -1,388 +1,294 @@
 /**
  * tensor.c
  *
- * Implementation for tensor.h.
+ * BRIEF:
+ * Implementation for tensor.h
  *
  * NOTE:
- *
- * Implementations rely on the fact that TENSOR_MAX_RANK = 2.
- * Higher dimensional tensors are not supported.
+ * Assumes TNSR_MAX_RANK is 2.
  */
 
-#include <math.h>
 #include <stdbool.h>
-#include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <float.h>
 
 #include "core/tensor.h"
 #include "utils/utils.h"
 
-typedef enum {
-  TENSOR_BROADCAST_INCOMPATIBLE,
-  TENSOR_BROADCAST_A_TO_B,
-  TENSOR_BROADCAST_B_TO_A,
-  TENSOR_BROADCAST_COMPATIBLE,
-  TENSOR_CONTRACT_COMPATIBLE,
-  TENSOR_CONTRACT_INCOMPATIBLE
-} tensor_compatible_t;
+#define _TNSR_EIMPL(dst, a, op, b)                                                          \
+  do {                                                                                      \
+    ASSERT(a && b);                                                                         \
+                                                                                            \
+    tnsr_size_t bstrd[TNSR_MAX_RANK] = {};                                                  \
+    ASSERT(b_broadcast_to_a(a, b, bstrd));                                                  \
+                                                                                            \
+    tnsr_t *rloc = dst;                                                                     \
+    if (!rloc) {                                                                            \
+      rloc = tnsr_create(TNSR_SHPE(a, 0), TNSR_SHPE(a, 1));                                 \
+      REQUIRE(rloc, goto error);                                                            \
+    }                                                                                       \
+    ASSERT(TNSR_SHPE(rloc, 0) == TNSR_SHPE(a, 0) && TNSR_SHPE(rloc, 1) == TNSR_SHPE(a, 1)); \
+                                                                                            \
+    for (tnsr_size_t i = 0; i < TNSR_SHPE(rloc, 0); ++i) {                                  \
+      for (tnsr_size_t j = 0; j < TNSR_SHPE(rloc, 1); ++j) {                                \
+        TNSR_DATA(rloc, i, j) = TNSR_DATA(a, i, j) op b->data[i * bstrd[0] + j * bstrd[1]]; \
+      }                                                                                     \
+    }                                                                                       \
+    return rloc;                                                                            \
+                                                                                            \
+  error:                                                                                    \
+    return NULL;                                                                            \
+  } while (0)
 
-// Checks if either A or B can be broadcasted to the other.
-tensor_compatible_t tensor_broadcast_compatible(const tensor_t *a, const tensor_t *b) {
-  REQUIRE(a && b, return TENSOR_BROADCAST_INCOMPATIBLE);
-  tensor_compatible_t cmpt = TENSOR_BROADCAST_INCOMPATIBLE;
+static bool b_broadcast_to_a(const tnsr_t *a, const tnsr_t *b, tnsr_size_t nstrd[TNSR_MAX_RANK]) {
+  ASSERT(a && b);
+  for (tnsr_size_t i = TNSR_MAX_RANK; i-- > 0;) {
+    const bool shp_diff = TNSR_SHPE(a, i) != TNSR_SHPE(b, i);
+    const bool bi_eq_one = TNSR_SHPE(b, i) == 1;
 
-  const tensor_rank_data_t *a_rank = a->rank_data;
-  const tensor_rank_data_t *b_rank = b->rank_data;
-  const tensor_rank_data_t *broadcast_source = NULL;
-  const tensor_rank_data_t *broadcast_target = NULL;
-  const tensor_size_t min_rank = min(a->rank, b->rank);
-  const tensor_size_t max_rank = max(a->rank, b->rank);
-
-  if (a->rank < b->rank) {
-    broadcast_source = a_rank;
-    broadcast_target = b_rank;
-    cmpt = TENSOR_BROADCAST_A_TO_B;
-  } else if (a->rank > b->rank) {
-    broadcast_source = b_rank;
-    broadcast_target = a_rank;
-    cmpt = TENSOR_BROADCAST_B_TO_A;
-  } else {
-    broadcast_source = a_rank;
-    broadcast_target = b_rank;
-    cmpt = TENSOR_BROADCAST_COMPATIBLE;
-  }
-
-  for (tensor_size_t i = 0; i < min_rank; ++i) {
-    const tensor_size_t trailing_target = max_rank - i - 1;
-    const tensor_size_t trailing_source = min_rank - i - 1;
-    bool equal = broadcast_source[trailing_source].shape == broadcast_target[trailing_target].shape;
-    bool has_one = broadcast_source[trailing_source].shape == 1 ||
-                   broadcast_target[trailing_target].shape == 1;
-    if (!equal && !has_one) {
-      cmpt = TENSOR_BROADCAST_INCOMPATIBLE;
-      break;
-    }
-    // Handles edge-case where both ranks are the same but one of them has a 1.
-    if (has_one && !equal && cmpt == TENSOR_BROADCAST_COMPATIBLE) {
-      cmpt = broadcast_source[trailing_source].shape == 1 ? TENSOR_BROADCAST_A_TO_B
-                                                          : TENSOR_BROADCAST_B_TO_A;
+    if (shp_diff && bi_eq_one) {
+      nstrd[i] = 0;
+    } else if (shp_diff) {
+      return false;
+    } else {
+      nstrd[i] = TNSR_STRD(b, i);
     }
   }
-  return cmpt;
+  return true;
 }
 
-// Checks if both tensors supports contraction.
-tensor_compatible_t tensor_contract_compatible(const tensor_t *a, const tensor_t *b) {
-  REQUIRE(a && b, return TENSOR_CONTRACT_INCOMPATIBLE);
-  const tensor_rank_data_t *min_rank_data = NULL;
-  const tensor_rank_data_t *max_rank_data = NULL;
-  tensor_size_t min_rank = 0;
-  tensor_size_t max_rank = 0;
-  bool cmpt = true;
+tnsr_t *tnsr_create(tnsr_size_t m, tnsr_size_t n) {
+  ASSERT(m > 0 && n > 0);
 
-  if (a->rank <= b->rank) {
-    min_rank_data = a->rank_data;
-    max_rank_data = b->rank_data;
-    min_rank = a->rank;
-    max_rank = b->rank;
-  } else {
-    min_rank_data = b->rank_data;
-    max_rank_data = a->rank_data;
-    min_rank = b->rank;
-    max_rank = a->rank;
-  }
+  tnsr_t *tensor = calloc(1, sizeof(tnsr_t) + sizeof(tnsr_type_t[m * n]));
+  REQUIRE(tensor, goto error);
 
-  if (min_rank == 0) {
-    return TENSOR_CONTRACT_INCOMPATIBLE;
-  }
-  switch (max_rank) {
-    case 1:
-      cmpt = min_rank_data[0].shape == max_rank_data[0].shape;
-      break;
+  TNSR_SHPE(tensor, 0) = m;
+  TNSR_SHPE(tensor, 1) = n;
+  TNSR_STRD(tensor, 0) = n;
+  TNSR_STRD(tensor, 1) = 1;
 
-    // Depends on argument order. If minimum is on left (min == a),
-    // then minimum rows must match maximum columns.
-    case 2:
-      cmpt = min_rank_data[0].shape == max_rank_data[min_rank_data == a->rank_data].shape;
-      break;
-  }
-  return cmpt ? TENSOR_CONTRACT_COMPATIBLE : TENSOR_CONTRACT_INCOMPATIBLE;
-}
-
-// Broadcasts strides on either A or B. (Sets specified strides to 0).
-tensor_compatible_t tensor_broadcast_strides(
-    const tensor_t *a,
-    const tensor_t *b,
-    tensor_rank_data_t a_stride[TENSOR_MAX_RANK],
-    tensor_rank_data_t b_stride[TENSOR_MAX_RANK]
-) {
-  REQUIRE(a && b, return TENSOR_BROADCAST_INCOMPATIBLE);
-  tensor_compatible_t cmpt = tensor_broadcast_compatible(a, b);
-  REQUIRE(cmpt != TENSOR_BROADCAST_INCOMPATIBLE, return TENSOR_BROADCAST_INCOMPATIBLE);
-
-  memcpy(a_stride, a->rank_data, sizeof(tensor_rank_data_t[TENSOR_MAX_RANK]));
-  memcpy(b_stride, b->rank_data, sizeof(tensor_rank_data_t[TENSOR_MAX_RANK]));
-
-  tensor_rank_data_t *source_strides = NULL;
-  switch (cmpt) {
-    case TENSOR_BROADCAST_B_TO_A:
-      source_strides = b_stride;
-      break;
-    case TENSOR_BROADCAST_A_TO_B:
-    case TENSOR_BROADCAST_COMPATIBLE:
-      source_strides = a_stride;
-      break;
-    default:
-      return TENSOR_BROADCAST_INCOMPATIBLE;
-  }
-
-  if (cmpt != TENSOR_BROADCAST_COMPATIBLE) {
-    for (tensor_size_t i = 0; i < TENSOR_MAX_RANK; ++i) {
-      tensor_rank_data_t *entry = &source_strides[i];
-      if (entry->shape == 1) {
-        entry->stride = 0;
-      }
-    }
-  }
-  return cmpt;
-}
-
-tensor_t *tensor_create(tensor_size_t rank, const tensor_size_t shape[rank]) {
-  REQUIRE(rank <= TENSOR_MAX_RANK, return NULL);
-  tensor_size_t size = 1;
-  for (tensor_size_t i = 0; i < rank; ++i) {
-    REQUIRE(shape[i] && TENSOR_MAX_SIZE / shape[i] > size, return NULL);
-    size *= shape[i];
-  }
-
-  tensor_t *tensor = malloc(sizeof(tensor_t) + sizeof(tensor_type_t[size]));
-  REQUIRE(tensor, return NULL);
-
-  tensor->rank = rank;
-  tensor_size_t cumulative_stride = 1;
-  for (tensor_size_t i = 0; i < rank; ++i) {
-    tensor->rank_data[i] = (tensor_rank_data_t){cumulative_stride, shape[i]};
-    cumulative_stride *= shape[i];
-  }
-  for (int i = rank; i < TENSOR_MAX_RANK; ++i) {
-    tensor->rank_data[i] = (tensor_rank_data_t){1, 1};
-  }
-  memset(tensor->data, 0, sizeof(tensor_type_t[size]));
   return tensor;
-}
 
-void tensor_destroy(tensor_t **tensor) {
-  REQUIRE(tensor && *tensor, return);
-  free(*tensor);
-  *tensor = NULL;
-}
-
-tensor_t *tensor_contract(
-    tensor_t *restrict dst, const tensor_t *restrict a, const tensor_t *restrict b
-) {
-  REQUIRE(a && b, return NULL);
-  REQUIRE(dst != a && dst != b, return NULL);
-  REQUIRE(tensor_contract_compatible(a, b) == TENSOR_CONTRACT_COMPATIBLE, return NULL);
-
-  const tensor_size_t shape[TENSOR_MAX_RANK] = {TENSOR_SHAPE(b, 0), TENSOR_SHAPE(a, 1)};
-  const tensor_size_t contract_axis_size = TENSOR_SHAPE(a, 0);
-  tensor_t *tensor_r = dst ? dst : tensor_create(max(a->rank, b->rank), shape);
-  REQUIRE(tensor_r, return NULL);
-  REQUIRE(
-      TENSOR_SHAPE(tensor_r, 0) == shape[0] && TENSOR_SHAPE(tensor_r, 1) == shape[1], return NULL
-  );
-
-  for (tensor_size_t i = 0; i < TENSOR_SHAPE(tensor_r, 1); ++i) {
-    for (tensor_size_t j = 0; j < TENSOR_SHAPE(tensor_r, 0); ++j) {
-      tensor_type_t point = 0.0;
-      for (tensor_size_t k = 0; k < contract_axis_size; ++k) {
-        const tensor_size_t ai = i * TENSOR_STRIDE(a, 1) + k * TENSOR_STRIDE(a, 0);
-        const tensor_size_t bi = k * TENSOR_STRIDE(b, 1) + j * TENSOR_STRIDE(b, 0);
-        point += a->data[ai] * b->data[bi];
-      }
-      tensor_r->data[i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(tensor_r, 0)] = point;
-    }
-  }
-  return tensor_r;
-}
-
-#define _TENSOR_E_2D_IMPL(op)                                                                     \
-  REQUIRE(a &&b, return NULL);                                                                    \
-  tensor_rank_data_t a_stride[TENSOR_MAX_RANK] = {};                                              \
-  tensor_rank_data_t b_stride[TENSOR_MAX_RANK] = {};                                              \
-  const tensor_compatible_t cmpt = tensor_broadcast_strides(a, b, a_stride, b_stride);            \
-  REQUIRE(cmpt != TENSOR_BROADCAST_INCOMPATIBLE, return NULL);                                    \
-                                                                                                  \
-  tensor_size_t shape[TENSOR_MAX_RANK] = {};                                                      \
-  for (tensor_size_t i = 0; i < TENSOR_MAX_RANK; ++i) {                                           \
-    shape[i] = max(TENSOR_SHAPE(a, i), TENSOR_SHAPE(b, i));                                       \
-  }                                                                                               \
-                                                                                                  \
-  tensor_t *tensor_r = dst ? dst : tensor_create(max(a->rank, b->rank), shape);                   \
-  REQUIRE(tensor_r, return NULL);                                                                 \
-  REQUIRE(TENSOR_SHAPE(tensor_r, 0) == shape[0] && TENSOR_SHAPE(tensor_r, 1) == shape[1],         \
-          !dst ? tensor_destroy(&tensor_r) : (void)0;                                             \
-          return NULL);                                                                           \
-  for (tensor_size_t i = 0; i < tensor_r->rank_data[1].shape; ++i) {                              \
-    for (tensor_size_t j = 0; j < tensor_r->rank_data[0].shape; ++j) {                            \
-      const tensor_type_t av = a->data[i * a_stride[1].stride + j * a_stride[0].stride];          \
-      const tensor_type_t bv = b->data[i * b_stride[1].stride + j * b_stride[0].stride];          \
-      tensor_r->data[i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(tensor_r, 0)] = av op bv; \
-    }                                                                                             \
-  }                                                                                               \
-  return tensor_r;
-
-tensor_t *tensor_emul(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
-  _TENSOR_E_2D_IMPL(*);
-}
-
-tensor_t *tensor_eadd(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
-  _TENSOR_E_2D_IMPL(+);
-}
-
-tensor_t *tensor_esub(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
-  _TENSOR_E_2D_IMPL(-);
-}
-
-tensor_t *tensor_ediv(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b) {
-  _TENSOR_E_2D_IMPL(/);
-}
-
-/// BUG: Fix leak on failure path.
-tensor_t *tensor_emap(tensor_t *dst, const tensor_t *a, tensor_type_t (*f)(tensor_type_t)) {
-  REQUIRE(a && f, return NULL);
-  tensor_t *tensor_r =
-      dst ? dst
-          : tensor_create(a->rank, TENSOR_DECLARE_SHAPE(TENSOR_SHAPE(a, 0), TENSOR_SHAPE(a, 1)));
-  REQUIRE(tensor_r, return NULL);
-  REQUIRE(
-      TENSOR_SHAPE(tensor_r, 0) == TENSOR_SHAPE(a, 0) &&
-          TENSOR_SHAPE(tensor_r, 1) == TENSOR_SHAPE(a, 1),
-      return NULL
-  );
-
-  for (tensor_size_t i = 0; i < TENSOR_SHAPE(tensor_r, 1); ++i) {
-    for (tensor_size_t j = 0; j < TENSOR_SHAPE(tensor_r, 0); ++j) {
-      tensor_size_t ti = i * TENSOR_STRIDE(tensor_r, 1) + j * TENSOR_STRIDE(tensor_r, 0);
-      tensor_size_t ai = i * TENSOR_STRIDE(a, 1) + j * TENSOR_STRIDE(a, 0);
-      tensor_type_t val = a->data[ai];
-      tensor_r->data[ti] = f(val);
-    }
-  }
-  return tensor_r;
-}
-
-tensor_t *tensor_transpose(tensor_t *dst, tensor_t *a) {
-  const tensor_size_t shape[TENSOR_MAX_RANK] = {TENSOR_SHAPE(a, 1), TENSOR_SHAPE(a, 0)};
-
-  // When dimension[1] is not 1, transposition promotes it to rank 2.
-  tensor_t *transposed = dst ? dst : tensor_create(shape[1] != 1 ? 2 : a->rank, shape);
-  REQUIRE(
-      TENSOR_SHAPE(transposed, 0) == shape[0] && TENSOR_SHAPE(transposed, 1) == shape[1],
-      return NULL
-  );
-
-  if (transposed == a) {  // Handle inplace.
-    tensor_rank_data_t tmp = a->rank_data[0];
-    a->rank_data[0] = a->rank_data[1];
-    a->rank_data[1] = tmp;
-    a->rank = shape[1] != 1 ? 2 : a->rank;
-    return a;
-  }
-
-  for (tensor_size_t i = 0; i < TENSOR_SHAPE(a, 1); ++i) {
-    for (tensor_size_t j = 0; j < TENSOR_SHAPE(a, 0); ++j) {
-      tensor_size_t ai = i * TENSOR_STRIDE(a, 1) + j * TENSOR_STRIDE(a, 0);
-      tensor_size_t ti = j * TENSOR_STRIDE(transposed, 1) + i * TENSOR_STRIDE(transposed, 0);
-      transposed->data[ti] = a->data[ai];
-    }
-  }
-  return transposed;
-}
-
-tensor_t *tensor_mse(
-    tensor_t *restrict dst, const tensor_t *restrict output, const tensor_t *restrict expected
-) {
-  REQUIRE(output && expected, return NULL);
-  REQUIRE(output->rank == expected->rank, return NULL);
-
-  tensor_t *n = NULL;
-  tensor_t *diff = NULL;
-  tensor_t *mse = dst ? dst : tensor_create(0, TENSOR_DECLARE_SHAPE(1, 1));
-  REQUIRE(TENSOR_SHAPE(mse, 0) == 1 && TENSOR_SHAPE(mse, 1) == 1 && mse->rank == 0, goto failure);
-
-  REQUIRE(diff = tensor_esub(NULL, output, expected), goto failure);
-
-  REQUIRE(tensor_emap(diff, diff, squared), goto failure);
-
-  for (tensor_size_t i = 0; i < TENSOR_SHAPE(diff, 1); ++i) {
-    for (tensor_size_t j = 0; j < TENSOR_SHAPE(diff, 0); ++j) {
-      const tensor_size_t id = i * TENSOR_STRIDE(diff, 1) + j * TENSOR_STRIDE(diff, 0);
-      mse->data[0] += diff->data[id];
-    }
-  }
-
-  n = tensor_create(0, TENSOR_DECLARE_SHAPE(1, 1));
-  REQUIRE(n, goto failure);
-  n->data[0] = TENSOR_SHAPE(output, 1);
-  REQUIRE(tensor_ediv(mse, mse, n), goto failure);
-  tensor_destroy(&n);
-  tensor_destroy(&diff);
-  return mse;
-failure:
-  if (!dst) {
-    tensor_destroy(&mse);
-  }
-  if (n) {
-    tensor_destroy(&n);
-  }
-  if (diff) {
-    tensor_destroy(&diff);
-  }
+error:
   return NULL;
 }
 
-tensor_type_t sigmoid(tensor_type_t x) {
-  return (tensor_type_t)(1.0 / (1.0 + exp(-x)));
+void tnsr_destroy(tnsr_t **t) {
+  REQUIRE(t && *t, return);
+  free(*t);
+  *t = NULL;
 }
 
-tensor_type_t relu(tensor_type_t x) {
-  return (tensor_type_t)(x > 0.0 ? x : 0.0);
+void tnsr_set(tnsr_t *t, tnsr_type_t x) {
+  ASSERT(t);
+
+#pragma omp parallel for
+  for (tnsr_size_t i = 0; i < TNSR_SHPE(t, 0); ++i) {
+#pragma omp simd
+    for (tnsr_size_t j = 0; j < TNSR_SHPE(t, 1); ++j) {
+      TNSR_DATA(t, i, j) = x;
+    }
+  }
 }
 
-tensor_type_t leaky_relu(tensor_type_t x) {
-  return (tensor_type_t)(x > 0.0 ? x : x * 0.01);
+void tnsr_reset(tnsr_t *t) {
+  ASSERT(t);
+  tnsr_set(t, 0);
 }
 
-tensor_type_t sigmoid_dx(tensor_type_t x) {
-  return (tensor_type_t)(x * (1 - x));  // x is defined as the output of sigmoid(x).
+tnsr_t *tnsr_contract(tnsr_t *restrict dst, const tnsr_t *restrict a, const tnsr_t *restrict b) {
+  ASSERT(a && b);
+  ASSERT(TNSR_SHPE(a, 1) == TNSR_SHPE(b, 0));
+
+  tnsr_t *rloc = dst;
+
+  if (!rloc) {
+    rloc = tnsr_create(TNSR_SHPE(a, 0), TNSR_SHPE(b, 1));
+    REQUIRE(rloc, goto error);
+  }
+  ASSERT( // Destination must have compatible shape.
+    TNSR_SHPE(rloc, 0) == TNSR_SHPE(a, 0) && 
+    TNSR_SHPE(rloc, 1) == TNSR_SHPE(b, 1)
+  );
+
+#pragma omp parallel for
+  for (tnsr_size_t i = 0; i < TNSR_SHPE(rloc, 0); ++i) {
+    for (tnsr_size_t k = 0; k < TNSR_SHPE(a, 1); ++k) {
+      tnsr_type_t a_ik = TNSR_DATA(a, i, k);
+#pragma omp simd
+      for (tnsr_size_t j = 0; j < TNSR_SHPE(rloc, 1); ++j) {
+        TNSR_DATA(rloc, i, j) += a_ik * TNSR_DATA(b, k, j);
+      }
+    }
+  }
+
+  return rloc;
+
+error:
+  return NULL;
 }
 
-tensor_type_t relu_dx(tensor_type_t x) {
-  return (tensor_type_t)(x > 0.0 ? 1.0 : 0.0);
+tnsr_t *tnsr_eadd(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
+  _TNSR_EIMPL(dst, a, +, b);
 }
 
-tensor_type_t leaky_relu_dx(tensor_type_t x) {
-  return (tensor_type_t)(x > 0.0 ? 1.0 : 0.01);
+tnsr_t *tnsr_esub(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
+  _TNSR_EIMPL(dst, a, -, b);
 }
 
-tensor_type_t zeroes(tensor_type_t x) {
-  (void)x;
-  return 0;
+tnsr_t *tnsr_emul(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
+  _TNSR_EIMPL(dst, a, *, b);
 }
 
-tensor_type_t squared(tensor_type_t x) {
-  return x * x;
+tnsr_t *tnsr_ediv(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
+  _TNSR_EIMPL(dst, a, /, b);
 }
 
-void dbg_tensor_print(tensor_t *tensor) {
-  for (tensor_size_t i = 0; i < TENSOR_SHAPE(tensor, 1); ++i) {
-    for (tensor_size_t j = 0; j < TENSOR_SHAPE(tensor, 0); ++j) {
-      tensor_size_t it = i * TENSOR_STRIDE(tensor, 1) + j * TENSOR_STRIDE(tensor, 0);
-      tensor_type_t val = tensor->data[it];
-      printf("%.5f ", val);
+tnsr_t *tnsr_emap(
+    tnsr_t *dst, tnsr_t *a, tnsr_type_t (*f)(tnsr_type_t, void *), void *restrict ctx
+) {
+  ASSERT(a && f);
+  tnsr_t *rloc = dst;
+  if (!rloc) {
+    rloc = tnsr_create(TNSR_SHPE(a, 0), TNSR_SHPE(a, 1));
+    REQUIRE(rloc, goto error);
+  }
+  ASSERT(TNSR_SHPE(rloc, 0) == TNSR_SHPE(a, 0) && TNSR_SHPE(rloc, 1) == TNSR_SHPE(a, 1));
+
+#pragma omp parallel for
+  for (tnsr_size_t i = 0; i < TNSR_SHPE(rloc, 0); ++i) {
+    for (tnsr_size_t j = 0; j < TNSR_SHPE(rloc, 1); ++j) {
+      TNSR_DATA(rloc, i, j) = f(TNSR_DATA(a, i, j), ctx);
+    }
+  }
+  return rloc;
+
+error:
+  return NULL;
+}
+
+tnsr_t *tnsr_transpose(tnsr_t *dst, tnsr_t *t) {
+  ASSERT(t);
+  if (dst == t) {
+    tnsr_size_t t = TNSR_SHPE(dst, 0);
+    TNSR_SHPE(dst, 0) = TNSR_SHPE(dst, 1);
+    TNSR_SHPE(dst, 1) = t;
+
+    t = TNSR_STRD(dst, 0);
+    TNSR_STRD(dst, 0) = TNSR_STRD(dst, 1);
+    TNSR_STRD(dst, 1) = t;
+    return dst;
+  }
+  tnsr_t *tp = tnsr_create(TNSR_SHPE(t, 1), TNSR_SHPE(t, 0));
+  REQUIRE(tp, goto error);
+
+#pragma omp parallel for
+  for (tnsr_size_t i = 0; i < TNSR_SHPE(tp, 0); ++i) {
+#pragma omp simd
+    for (tnsr_size_t j = 0; j < TNSR_SHPE(tp, 1); ++j) {
+      TNSR_DATA(tp, i, j) = TNSR_DATA(t, j, i);
+    }
+  }
+  return tp;
+error:
+  return NULL;
+}
+
+tnsr_t *tnsr_sum_over_axis(tnsr_t *restrict dst, tnsr_t *restrict t, tnsr_size_t axis) {
+  ASSERT(t && axis >= 0 && axis < TNSR_MAX_RANK);
+
+  const tnsr_size_t m = axis ? TNSR_SHPE(t, 0) : 1;
+  const tnsr_size_t n = axis ? 1 : TNSR_SHPE(t, 1);
+  tnsr_t *sumloc = dst;
+  if (!sumloc) {
+    sumloc = tnsr_create(m, n);
+    REQUIRE(sumloc, goto error);
+  }
+  ASSERT(TNSR_SHPE(sumloc, 0) == m && TNSR_SHPE(sumloc, 1) == n);
+
+  const tnsr_size_t p = axis ? TNSR_SHPE(t, 0) : TNSR_SHPE(t, 1);
+  const tnsr_size_t q = axis ? TNSR_SHPE(t, 1) : TNSR_SHPE(t, 0);
+
+  #pragma omp parallel for
+  for (tnsr_size_t i = 0; i < p; ++i) {
+    tnsr_type_t si = 0;
+    for (tnsr_size_t j = 0; j < q; ++j) {
+      si += axis ? TNSR_DATA(t, i, j) : TNSR_DATA(t, j, i);
+    }
+    if (axis) {
+      TNSR_DATA(sumloc, i, 0) = si;
+    } else {
+      TNSR_DATA(sumloc, 0, i) = si;
+    }
+  }
+
+  return sumloc;
+error:
+  return NULL;
+}
+
+tnsr_t *tnsr_max_over_axis(tnsr_t *restrict dst, tnsr_t *restrict t, tnsr_size_t axis) {
+  ASSERT(t && axis >= 0 && axis < TNSR_MAX_RANK);
+
+  const tnsr_size_t m = axis ? TNSR_SHPE(t, 0) : 1;
+  const tnsr_size_t n = axis ? 1 : TNSR_SHPE(t, 1);
+  tnsr_t *maxloc = dst;
+  if (!maxloc) {
+    maxloc = tnsr_create(m, n);
+    REQUIRE(maxloc, goto error);
+  }
+  ASSERT(TNSR_SHPE(maxloc, 0) == m && TNSR_SHPE(maxloc, 1) == n);
+
+  const tnsr_size_t p = axis ? TNSR_SHPE(t, 0) : TNSR_SHPE(t, 1);
+  const tnsr_size_t q = axis ? TNSR_SHPE(t, 1) : TNSR_SHPE(t, 0);
+
+  #pragma omp parallel for
+  for (tnsr_size_t i = 0; i < p; ++i) {
+    tnsr_type_t maxi = -FLT_MAX;
+    for (tnsr_size_t j = 0; j < q; ++j) {
+      const tnsr_type_t val = axis ? TNSR_DATA(t, i, j) : TNSR_DATA(t, j, i);
+      maxi = max(maxi, val);
+    }
+    if (axis) {
+      TNSR_DATA(maxloc, i, 0) = maxi;
+    } else {
+      TNSR_DATA(maxloc, 0, i) = maxi;
+    }
+  }
+  return maxloc;
+error:
+  return NULL;
+}
+
+tnsr_t *tnsr_mean(tnsr_t *dst, tnsr_t *t) {
+  ASSERT(t);
+  
+  tnsr_t *avg = dst;
+  if (!avg) {
+    avg = TNSR_SCALAR();
+    REQUIRE(avg, goto error);
+  }
+  ASSERT(TNSR_SHPE(avg, 0) == 1 && TNSR_SHPE(avg, 1) == 1);
+
+  tnsr_type_t sum = 0;
+  for (tnsr_size_t i = 0; i < TNSR_SHPE(t, 0); ++i) {
+    for (tnsr_size_t j = 0; j < TNSR_SHPE(t, 1); ++j) {
+      sum += TNSR_DATA(t, i, j);
+    }
+  }
+  tnsr_set(avg, sum / (TNSR_SHPE(t, 0) * TNSR_SHPE(t, 1)));
+  return avg;
+
+error:
+  return NULL;
+}
+
+void tnsr_dbgprint(tnsr_t *t) {
+  ASSERT(t);
+  for (tnsr_size_t i = 0; i < TNSR_SHPE(t, 0); ++i) {
+    for (tnsr_size_t j = 0; j < TNSR_SHPE(t, 1); ++j) {
+      printf("%.3f ", TNSR_DATA(t, i, j));
     }
     printf("\n");
   }

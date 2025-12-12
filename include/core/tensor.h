@@ -1,96 +1,81 @@
 /**
  * tensor.h
  *
- * Declaration for the tensor_t struct and its
- * related functions.
- *
- * NOTE: Implementation only supports TENSOR_MAX_RANK = 2.
+ * BRIEF:
+ * Declaration for the tensor_t struct and
+ * its related functions and macro definitions.
+ * 
+ * NOTE:
+ * Implementation relies on TNSR_MAX_RANK being 2.
  */
 
 #pragma once
 
-#include <stdbool.h>
+#include <math.h>
 #include <stdint.h>
+#include <stdlib.h>  // IWYU pragma: export
 
-#define TENSOR_MAX_RANK 2
-#define TENSOR_MAX_SIZE UINT32_MAX
+typedef uint32_t tnsr_size_t;
+typedef float tnsr_type_t;
 
-#define TENSOR_DECLARE_SHAPE(a, b)   \
-  (tensor_size_t[TENSOR_MAX_RANK]) { \
-    a, b                             \
-  }
+#define TNSR_MAX_RANK 2
+#define TNSR_MAX_SIZE UINT32_MAX
 
-#define TENSOR_STRIDE(tensor, dimension) (tensor->rank_data[dimension].stride)
-#define TENSOR_SHAPE(tensor, dimension) (tensor->rank_data[dimension].shape)
+/* -------------------------------- Accessors ------------------------------- */
 
-typedef uint32_t tensor_size_t;
-typedef float tensor_type_t;
+#define TNSR_STRD(tensor, n) (tensor->stride[n])
+#define TNSR_SHPE(tensor, n) (tensor->shape[n])
+#define TNSR_DATA(tensor, i, j) (tensor->data[i * tensor->stride[0] + j * tensor->stride[1]])
+#define TNSR_DSTR(tensor) (tnsr_destroy(&tensor))
 
-// Tensor rank data.
+/* ----------------------------------- API ---------------------------------- */
+
+#define TNSR_MATRIX(n, m) tnsr_create(n, m)
+#define TNSR_COLVEC(n) tnsr_create(n, 1)
+#define TNSR_ROWVEC(m) tnsr_create(1, m)
+#define TNSR_SCALAR() tnsr_create(1, 1)
+#define TNSR_FROM_ARRAY(t, a) memcpy(t->data, a, sizeof(t->data))
+
+// Generic tensor type.
 typedef struct {
-  tensor_size_t stride;
-  tensor_size_t shape;
-} tensor_rank_data_t;
+  tnsr_size_t shape[TNSR_MAX_RANK];
+  tnsr_size_t stride[TNSR_MAX_RANK];
+  tnsr_type_t data[];
+} tnsr_t;
 
-// Tensor object.
-typedef struct {
-  tensor_size_t rank;
-  tensor_rank_data_t rank_data[TENSOR_MAX_RANK];
-  tensor_type_t data[];
-} tensor_t;
+// Creates a zero-initialized tensor with the specified dimensions. NULL upon failure.
+tnsr_t *tnsr_create(tnsr_size_t n, tnsr_size_t m);
 
-// Creates a tensor with the specified characteristics.
-tensor_t *tensor_create(tensor_size_t rank, const tensor_size_t shape[rank]);
+// Destroys the given tensor. Passing NULL is a no-op.
+void tnsr_destroy(tnsr_t **t);
 
-// Destroys a tensor and sets its pointer to NULL.
-void tensor_destroy(tensor_t **tensor);
-
-// Tensor contraction. Only supports up to TENSOR_MAX_RANK.
-tensor_t *tensor_contract(
-    tensor_t *restrict dst, const tensor_t *restrict a, const tensor_t *restrict b
-);
-
-// Tensor element-wise multiplication.
-tensor_t *tensor_emul(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b);
+// Tensor contraction.
+tnsr_t *tnsr_contract(tnsr_t *restrict dst, tnsr_t *restrict a, tnsr_t *restrict b);
 
 // Tensor element-wise addition.
-tensor_t *tensor_eadd(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b);
+tnsr_t *tnsr_eadd(tnsr_t *dst, tnsr_t *a, tnsr_t *restrict b);
 
 // Tensor element-wise subtraction.
-tensor_t *tensor_esub(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b);
+tnsr_t *tnsr_esub(tnsr_t *dst, tnsr_t *a, tnsr_t *restrict b);
+
+// Tensor element-wise multiplication.
+tnsr_t *tnsr_emul(tnsr_t *dst, tnsr_t *a, tnsr_t *restrict b);
 
 // Tensor element-wise division.
-tensor_t *tensor_ediv(tensor_t *dst, const tensor_t *a, const tensor_t *restrict b);
+tnsr_t *tnsr_ediv(tnsr_t *dst, tnsr_t *a, tnsr_t *restrict b);
 
 // Tensor element-wise function mapping.
-tensor_t *tensor_emap(tensor_t *dst, const tensor_t *a, tensor_type_t (*f)(tensor_type_t));
+tnsr_t *tnsr_emap(tnsr_t *dst, tnsr_t *a, tnsr_type_t (*f)(tnsr_type_t, void*), void *restrict ctx);
 
-// Swaps metadata if a == dst. If not, result is stored on dst if dst != NULL.
-tensor_t *tensor_transpose(tensor_t *dst, tensor_t *a);
+// Tensor transpose.
+tnsr_t *tnsr_transpose(tnsr_t *dst, tnsr_t *a);
 
-// Calculates the mean-squared error from a given output and expected output. Outputs a scalar.
-tensor_t *tensor_mse(tensor_t *restrict dst, const tensor_t *restrict output, const tensor_t *restrict expected);
+// Sets all fields of the tensor to the specified value.
+void tnsr_set(tnsr_type_t x);
 
-// Calculates the derivative of the mean-squared error.
-tensor_t *tensor_mse_dx(tensor_t *restrict dst, const tensor_t *restrict output, const tensor_t *restrict expected);
+// Resets the tensor's values to zero. Equivalent to `tnsr_set(0)`.
+void tnsr_reset(tnsr_t *t);
 
-tensor_type_t sigmoid(tensor_type_t x);
-tensor_type_t relu(tensor_type_t x);
-tensor_type_t leaky_relu(tensor_type_t x);
+// Prints the tensor to stderr.
+void tnsr_dbgprint(tnsr_t *t);
 
-// Sigmoid derivative.
-tensor_type_t sigmoid_dx(tensor_type_t x);
-
-// ReLU derivative.
-tensor_type_t relu_dx(tensor_type_t x);
-
-// Leaky ReLU derivative.
-tensor_type_t leaky_relu_dx(tensor_type_t x);
-
-// Returns 0.
-tensor_type_t zeroes(tensor_type_t x);
-
-// Returns x^2.
-tensor_type_t squared(tensor_type_t x);
-
-void dbg_tensor_print(tensor_t *tensor);

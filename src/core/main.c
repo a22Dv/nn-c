@@ -35,11 +35,11 @@ int main() {
   tensor_t *w2t = tensor_create(2, TENSOR_DECLARE_SHAPE(2, 1));
   tensor_t *w2g = tensor_create(2, TENSOR_DECLARE_SHAPE(2, 1));
   tensor_t *b2t = tensor_create(2, TENSOR_DECLARE_SHAPE(1, 1));
-  tensor_t *b2g = tensor_create(2, TENSOR_DECLARE_SHAPE(1, 1));
+  tensor_t *b2g = tensor_create(2, TENSOR_DECLARE_SHAPE(1, 1)); 
   REQUIRE(w2t && w2g && b2t && b2g, return EXIT_FAILURE);
 
   cnode_t *w2 = cnode_create(0, 1, NULL, NULL, w2t, w2g, CN_DATA);
-  cnode_t *b2 = cnode_create(0, 1, NULL, NULL, b2t, b2g, CN_DATA);
+  cnode_t *b2 = cnode_create(0, 1, NULL, NULL, b2t, b2g, CN_DATA); 
   REQUIRE(w2 && b2, return EXIT_FAILURE);
 
   // Graph setup.

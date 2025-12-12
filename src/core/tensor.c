@@ -250,6 +250,7 @@ tensor_t *tensor_ediv(tensor_t *dst, const tensor_t *a, const tensor_t *restrict
   _TENSOR_E_2D_IMPL(/);
 }
 
+/// BUG: Fix leak on failure path.
 tensor_t *tensor_emap(tensor_t *dst, const tensor_t *a, tensor_type_t (*f)(tensor_type_t)) {
   REQUIRE(a && f, return NULL);
   tensor_t *tensor_r =

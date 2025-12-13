@@ -93,5 +93,14 @@ FRCINL tnsr_type_t euler(tnsr_type_t x, void *ctx) {
   return expf(x);
 }
 
+FRCINL tnsr_type_t ln(tnsr_type_t x, void *ctx) {
+  (void)ctx;
+  return logf(x);
+}
+
+FRCINL tnsr_type_t mul_neg1(tnsr_type_t x, void *ctx) {
+  (void)ctx;
+  return -x;
+}
 
 

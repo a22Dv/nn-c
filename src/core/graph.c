@@ -11,9 +11,7 @@
 #include "core/graph_functions.h"
 #include "utils/utils.h"
 
-static grph_size_t input_req[] = {
-    _GRPH_INPUT_TBLE
-};
+static grph_size_t input_req[] = {_GRPH_INPUT_TBLE};
 
 static node_t *(*node_functions[])(grph_t *, grph_size_t, grph_size_t) = {
     [NDTYPE_TRANSPOSE] = node_transpose,
@@ -29,6 +27,74 @@ static node_t *(*node_functions[])(grph_t *, grph_size_t, grph_size_t) = {
     [NDTYPE_CROSS_ENTROPY_LOSS] = node_cross_entropy_loss,
     [NDTYPE_SOFTMAX] = node_softmax,
 };
+
+static bool (*node_functions_dx[])(grph_t *, grph_size_t) = {
+    [NDTYPE_TRANSPOSE] = node_transpose_dx,
+    [NDTYPE_CONTRACT] = node_contract_dx,
+    [NDTYPE_EADD] = node_eadd_dx,
+    [NDTYPE_ESUB] = node_esub_dx,
+    [NDTYPE_EMUL] = node_emul_dx,
+    [NDTYPE_EDIV] = node_ediv_dx,
+    [NDTYPE_ESIGMOID] = node_esigmoid_dx,
+    [NDTYPE_ERELU] = node_erelu_dx,
+    [NDTYPE_ELEAKYRELU] = node_eleakyrelu_dx,
+    [NDTYPE_MSE] = node_mse_dx,
+    [NDTYPE_CROSS_ENTROPY_LOSS] = node_cross_entropy_loss_dx,
+    [NDTYPE_SOFTMAX] = node_softmax_dx,
+};
+
+typedef enum {
+  ND_NOT_VISITED,
+  ND_VISITING,
+  ND_VISITED,
+} node_visited_t;
+
+static bool topological_sort(
+    grph_t *g, grph_size_t n, grph_size_t *topological, node_visited_t *visited, grph_size_t *count
+) {
+  ASSERT(g && topological && visited && count);
+  visited[n] = ND_VISITING;
+  for (grph_size_t i = 0; i < GRPH_NODE_NDEP(g, n); ++i) {
+    const grph_size_t node_id = GRPH_NODE_DEPS(g, n)[i];
+    REQUIRE(visited[node_id] != ND_VISITING, goto error);
+    if (visited[node_id] == ND_VISITED) {
+      continue;
+    }
+    REQUIRE(topological_sort(g, node_id, topological, visited, count), goto error);
+  }
+  visited[n] = ND_VISITED;
+  topological[*count] = n;
+  ++(*count);
+  return true;
+error:
+  return false;
+}
+
+static grph_size_t grph_tail(grph_t *g) {
+  ASSERT(g);
+  grph_size_t *outdegs = calloc(1, sizeof(grph_size_t[GRPH_NODES(g)]));
+  REQUIRE(outdegs, goto error);
+
+  for (grph_size_t i = 0; i < GRPH_NODES(g); ++i) {
+    grph_size_t ndep = GRPH_NODE_NDEP(g, i);
+    for (grph_size_t j = 0; j < ndep; ++j) {
+      ++outdegs[GRPH_NODE_DEPS(g, i)[j]];
+    }
+  }
+  grph_size_t tail = 0;
+  for (grph_size_t i = 0; i < GRPH_NODES(g); ++i) {
+    if (!outdegs[i]) {
+      REQUIRE(tail == 0, goto error);
+      tail = i;
+    }
+  }
+  free(outdegs);
+  return tail;
+
+error:
+  free(outdegs);
+  return GRPH_ERR_ID;
+}
 
 static grph_t *grph_resize(grph_t *g) {
   ASSERT(g);
@@ -61,6 +127,16 @@ error:
 
 void grph_destroy(grph_t **g) {
   REQUIRE(g && *g, return);
+  grph_t *graph = *g;
+  for (grph_size_t i = 0; i < GRPH_NODES(graph); ++i) {
+    if (GRPH_NODE_TRANSIENT(graph, i)) {
+      node_destroy(&GRPH_NODE(graph, i));
+    } else {
+      tnsr_destroy(&GRPH_NODE(graph, i)->grad);
+      free(GRPH_NODE(graph, i));
+      GRPH_NODE(graph, i) = NULL;
+    }
+  }
   free(*g);
   *g = NULL;
 }
@@ -108,6 +184,34 @@ error:
 
 bool grph_trace(grph_t *g) {
   ASSERT(g);
+  grph_size_t tail = grph_tail(g);
+  grph_size_t *topological = NULL;
+  node_visited_t *visited = NULL;
+  REQUIRE(tail != GRPH_ERR_ID, goto error);
 
+  topological = malloc(sizeof(grph_size_t[GRPH_NODES(g)]));
+  visited = calloc(1, sizeof(node_visited_t[GRPH_NODES(g)]));
+
+  REQUIRE(topological && visited, goto error);
+
+  grph_size_t found = 0;
+  REQUIRE(topological_sort(g, tail, topological, visited, &found), goto error);
+
+  for (int i = GRPH_NODES(g); i-- > 0;) {
+    const grph_size_t node_id = topological[i];
+    const node_type_t ntype = GRPH_NODE_TYPE(g, node_id);
+    if (ntype == NDTYPE_DATA) {
+      continue;
+    }
+    REQUIRE(node_functions_dx[ntype](g, node_id), goto error);
+  }
+
+  free(topological);
+  free(visited);
+  return true;
+
+error:
+  free(topological);
+  free(visited);
   return false;
 }

@@ -17,7 +17,7 @@
 static grph_size_t input_req[] = {_GRPH_INPUT_TBLE};
 
 static grph_size_t output_size[] = {
-    [NDTYPE_DATA] = OUTSIZE_DEP_SAMEAS,
+    [NDTYPE_DATA] = OUTSIZE_INDEPENDENT,
     [NDTYPE_TRANSPOSE] = OUTSIZE_TRANSPOSED,
     [NDTYPE_CONTRACT] = OUTSIZE_DEP_ON_A0 | OUTSIZE_DEP_ON_B1,
     [NDTYPE_EADD] = OUTSIZE_DEP_SAMEAS,
@@ -498,7 +498,7 @@ bool node_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
   tnsr_set(GRPH_NODE_GRAD(g, a), 1);
   tnsr_t *inter = tnsr_create(TNSR_SHPE(data_a_dep1, 0), TNSR_SHPE(data_a_dep1, 1));
   REQUIRE(inter, goto error);
-  tnsr_set(inter, -1);
+  tnsr_set(inter, -1.0f / TNSR_SHPE(data_a_dep0, 0));
   REQUIRE(tnsr_emul(inter, inter, data_a_dep1), goto error);
   REQUIRE(tnsr_ediv(inter, inter, data_a_dep0), goto error);
 

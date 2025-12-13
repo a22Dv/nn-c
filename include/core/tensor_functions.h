@@ -73,7 +73,7 @@ FRCINL tnsr_type_t leaky_relu_dx(tnsr_type_t x, void *ctx) {
 FRCINL tnsr_type_t rand_uniform(tnsr_type_t x, void *ctx) {
   (void)ctx;
   (void)x;
-  return (((tnsr_type_t)(rand()) / RAND_MAX) - 0.5f) * 2;
+  return ((tnsr_type_t)(rand()) / RAND_MAX);  // Range [0.0-1.0]
 }
 
 FRCINL tnsr_type_t glorot(tnsr_type_t x, void *ctx) {
@@ -102,5 +102,3 @@ FRCINL tnsr_type_t mul_neg1(tnsr_type_t x, void *ctx) {
   (void)ctx;
   return -x;
 }
-
-

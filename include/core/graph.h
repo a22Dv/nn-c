@@ -28,8 +28,10 @@ typedef uint16_t grph_size_t;
 #define GRPH_NODE_DATA(g, i) ((g)->adj_list[i]->data)
 #define GRPH_NODE_GRAD(g, i) ((g)->adj_list[i]->grad)
 #define GRPH_NODE_TYPE(g, i) ((g)->adj_list[i]->type)
-#define GRPH_NODE_NDEP(g, i) ((g)->adj_list[i]->ndependencies)
+#define GRPH_NODE_NDEP(g, i) ((g)->adj_list[i]->n_dependencies)
+#define GRPH_NODE_NDEP_CPCTY(g, i) ((g)->adj_list[i]->n_deps_capacity)
 #define GRPH_NODE_DEPS(g, i) ((g)->adj_list[i]->dependencies)
+
 
 #define GRPH_CPCTY(g) ((g)->capacity)
 #define GRPH_NODES(g) ((g)->nodes)

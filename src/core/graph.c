@@ -8,7 +8,7 @@
 #include <string.h>
 
 #include "core/graph.h"
-#include "core/graph_functions.h"
+#include "core/node.h"
 #include "utils/utils.h"
 
 static grph_size_t input_req[] = {_GRPH_INPUT_TBLE};

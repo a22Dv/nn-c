@@ -74,17 +74,7 @@ typedef enum {
   OUTSIZE_INDEPENDENT = (1 << 7),
 } grph_outsize_t;
 
-typedef struct {
-  bool transient;
-  tnsr_t *data;
-  tnsr_t *grad;
-  node_type_t type;
-
-  grph_size_t n_dependencies;
-  grph_size_t n_deps_capacity;
-  grph_size_t dependencies[];
-} node_t;
-
+typedef struct node node_t;
 typedef struct {
   grph_size_t nodes;
   grph_size_t capacity;

@@ -35,7 +35,7 @@ typedef float tnsr_type_t;
 #define TNSR_ROWVEC(n) tnsr_create(1, n)
 #define TNSR_SCALAR() tnsr_create(1, 1)
 
-#define TNSR_FROM_ARRAY(t, a) memcpy(t->data, a, tensor->shape[0] * tensor->shape[1])
+#define TNSR_FROM_ARRAY(t, a) memcpy(t->data, a, t->shape[0] * t->shape[1])
 
 // Generic tensor type.
 typedef struct {

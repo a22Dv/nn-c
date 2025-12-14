@@ -1,5 +1,5 @@
 /**
- * graph_functions.h
+ * node.h
  *
  * BRIEF:
  * Declarations for graph-related functions
@@ -9,6 +9,18 @@
 #pragma once
 
 #include "core/graph.h"
+
+typedef struct node {
+  bool transient;
+  tnsr_t *data;
+  tnsr_t *grad;
+  node_type_t type;
+
+  grph_size_t n_dependencies;
+  grph_size_t n_deps_capacity;
+  grph_size_t dependencies[];
+} node_t;
+
 
 // Creates the appropriate node based on the node type.
 node_t *node_create(grph_t *g, tnsr_t *data, grph_size_t a, grph_size_t b, node_type_t type);

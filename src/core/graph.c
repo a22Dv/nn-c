@@ -24,7 +24,8 @@ static node_t *(*node_functions[])(grph_t *, grph_size_t, grph_size_t) = {
     [NDTYPE_ERELU] = node_erelu,
     [NDTYPE_ELEAKYRELU] = node_eleakyrelu,
     [NDTYPE_MSE] = node_mse,
-    [NDTYPE_CROSS_ENTROPY_LOSS] = node_cross_entropy_loss,
+    [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = node_categorical_cross_entropy_loss,
+    [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = node_binary_cross_entropy_loss,
     [NDTYPE_SOFTMAX] = node_softmax,
 };
 
@@ -39,7 +40,8 @@ static bool (*node_functions_dx[])(grph_t *, grph_size_t) = {
     [NDTYPE_ERELU] = node_erelu_dx,
     [NDTYPE_ELEAKYRELU] = node_eleakyrelu_dx,
     [NDTYPE_MSE] = node_mse_dx,
-    [NDTYPE_CROSS_ENTROPY_LOSS] = node_cross_entropy_loss_dx,
+    [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = node_categorical_cross_entropy_loss_dx,
+    [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = node_binary_cross_entropy_loss_dx,
     [NDTYPE_SOFTMAX] = node_softmax_dx,
 };
 

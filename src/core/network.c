@@ -12,7 +12,6 @@
 #include "core/tensor_functions.h"
 #include "utils/utils.h"
 
-
 dense_layer_t *dense_layer_create(
     grph_size_t fan_in,
     grph_size_t fan_out,
@@ -84,15 +83,31 @@ error:
   return false;
 }
 
+void dense_layer_remove_from_graph(dense_layer_t *dl) {
+  ASSERT(dl);
+  dl->weights_id = GRPH_NO_INPUT_ID;
+  dl->biases_id = GRPH_NO_INPUT_ID;
+}
+
 grph_size_t dense_layer_passthrough(grph_t **g, dense_layer_t *dl, grph_size_t input) {
   ASSERT(g && *g && dl && input != GRPH_NO_INPUT_ID);
   ASSERT(dl->weights_id != GRPH_NO_INPUT_ID && dl->biases_id != GRPH_NO_INPUT_ID);
+
   grph_size_t nd = grph_execute(g, input, dl->weights_id, NDTYPE_CONTRACT);
   REQUIRE(nd != GRPH_ERR_ID, goto error);
   nd = grph_execute(g, nd, dl->biases_id, NDTYPE_EADD);
   REQUIRE(nd != GRPH_ERR_ID, goto error);
-  nd = grph_execute(g, nd, GRPH_NO_INPUT_ID, dl->function_type);
-  REQUIRE(nd, goto error);
+  switch (dl->function_type) {
+    case NDTYPE_ELEAKYRELU:
+    case NDTYPE_ERELU:
+    case NDTYPE_ESIGMOID:
+    case NDTYPE_SOFTMAX:
+      nd = grph_execute(g, nd, GRPH_NO_INPUT_ID, dl->function_type);
+      REQUIRE(nd, goto error);
+      break;
+    default:
+      ASSERT(false);  // Unreachable.
+  }
   return nd;
 error:
   return GRPH_ERR_ID;
@@ -105,7 +120,7 @@ bool dense_layer_update(grph_t **g, dense_layer_t *dl) {
   if (!dl->optimizer) {
     ml = TNSR_SCALAR();
     REQUIRE(ml, goto error);
-    tnsr_set(ml, -DEFAULT_LR); 
+    tnsr_set(ml, -DEFAULT_LR);
     tnsr_t *wgrad = GRPH_NODE_GRAD(*g, dl->weights_id);
     tnsr_t *bgrad = GRPH_NODE_GRAD(*g, dl->biases_id);
     REQUIRE(tnsr_emul(wgrad, wgrad, ml), goto error);
@@ -120,4 +135,12 @@ bool dense_layer_update(grph_t **g, dense_layer_t *dl) {
 error:
   tnsr_destroy(&ml);
   return false;
+}
+
+void dense_layer_dbgprint(dense_layer_t *dl) {
+  ASSERT(dl);
+  printf("W:\n");
+  tnsr_dbgprint(dl->weights);
+  printf("B:\n");
+  tnsr_dbgprint(dl->biases);
 }

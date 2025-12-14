@@ -35,7 +35,7 @@ typedef float tnsr_type_t;
 #define TNSR_ROWVEC(n) tnsr_create(1, n)
 #define TNSR_SCALAR() tnsr_create(1, 1)
 
-#define TNSR_FROM_ARRAY(t, a) memcpy(t->data, a, t->shape[0] * t->shape[1])
+#define TNSR_FROM_ARRAY(t, a) memcpy(t->data, a, sizeof(tnsr_type_t[t->shape[0] * t->shape[1]]));
 
 // Generic tensor type.
 typedef struct {
@@ -89,5 +89,5 @@ tnsr_t *tnsr_max_over_axis(tnsr_t *restrict dst, tnsr_t *restrict t, tnsr_size_t
 // Take the mean of the tensor's fields.
 tnsr_t *tnsr_mean(tnsr_t *restrict dst, tnsr_t *restrict t);
 
-// Prints the tensor to stderr.
+// Prints the tensor to stdout.
 void tnsr_dbgprint(tnsr_t *t);

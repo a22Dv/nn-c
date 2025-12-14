@@ -1,15 +1,15 @@
 /**
- * graph_functions.c
+ * node.c
  *
  * BRIEF:
- * Implementation for graph_functions.h
+ * Implementation for node.h
  */
 
 #include <stdbool.h>
 #include <stddef.h>
 
 #include "core/graph.h"
-#include "core/graph_functions.h"
+#include "core/node.h"
 #include "core/tensor.h"
 #include "core/tensor_functions.h"
 #include "utils/utils.h"
@@ -28,9 +28,54 @@ static grph_size_t output_size[] = {
     [NDTYPE_ERELU] = OUTSIZE_DEP_SAMEAS,
     [NDTYPE_ELEAKYRELU] = OUTSIZE_DEP_SAMEAS,
     [NDTYPE_MSE] = OUTSIZE_SCALAR,
-    [NDTYPE_CROSS_ENTROPY_LOSS] = OUTSIZE_SCALAR,
+    [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = OUTSIZE_SCALAR,
+    [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = OUTSIZE_SCALAR,
     [NDTYPE_SOFTMAX] = OUTSIZE_DEP_SAMEAS,
 };
+
+/**
+ * Handles gradient accumulation across batches.
+ * NOTE:
+ * Needed to support batching operations as this
+ * "undoes" the implicit broadcasting operations done by
+ * the previous node.
+ */
+static bool _accumulate_grad(tnsr_t *dst, tnsr_t *grad) {
+  ASSERT(dst && grad);
+  const bool match0 = TNSR_SHPE(dst, 0) == TNSR_SHPE(grad, 0);
+  const bool match1 = TNSR_SHPE(dst, 1) == TNSR_SHPE(grad, 1);
+  if (match0 && match1) {
+    return tnsr_eadd(dst, dst, grad);
+  }
+  tnsr_t *rb = NULL;
+  tnsr_t *acc = NULL;
+  if (!match0) {
+    rb = tnsr_sum_over_axis(NULL, grad, 0);
+  } else if (!match1) {  // Only runs should it match at axis 0.
+    rb = tnsr_sum_over_axis(NULL, grad, 1);
+  }
+  REQUIRE(rb, goto error);
+  if (!match1 && !match0) {
+    // Handles when both cases are needed
+    // by summing over the sum of axis 0.
+    acc = tnsr_sum_over_axis(NULL, rb, 1);
+    REQUIRE(acc, goto error);
+  } else {  // Copies pointer.
+    acc = rb;
+  }
+  REQUIRE(tnsr_eadd(dst, dst, acc), goto error);
+  if (!match1 && !match0) {
+    tnsr_destroy(&rb);
+  }
+  tnsr_destroy(&acc);
+  return true;
+error:
+  if (!match1 && !match0) {
+    tnsr_destroy(&rb);
+  }
+  tnsr_destroy(&acc);
+  return false;
+}
 
 node_t *node_create(grph_t *g, tnsr_t *data, grph_size_t a, grph_size_t b, node_type_t type) {
   ASSERT(g);
@@ -243,12 +288,12 @@ error:
   return NULL;
 }
 
-node_t *node_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b) {
+node_t *node_categorical_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b) {
   ASSERT(g && a != GRPH_NO_INPUT_ID && b != GRPH_NO_INPUT_ID);
 
   tnsr_t *y_logp = NULL;
   tnsr_t *sum = NULL;
-  node_t *node = node_create(g, NULL, a, b, NDTYPE_CROSS_ENTROPY_LOSS);
+  node_t *node = node_create(g, NULL, a, b, NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS);
   REQUIRE(node, goto error);
   y_logp = tnsr_emap(NULL, GRPH_NODE_DATA(g, a), ln, NULL);
   REQUIRE(y_logp, goto error);
@@ -263,6 +308,44 @@ node_t *node_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b) {
   return node;
 error:
   tnsr_destroy(&y_logp);
+  tnsr_destroy(&sum);
+  node_destroy(&node);
+  return NULL;
+}
+
+node_t *node_binary_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b) {
+  ASSERT(g && a != GRPH_NO_INPUT_ID && b != GRPH_NO_INPUT_ID);
+  tnsr_t *y_logp = NULL;
+  tnsr_t *o_ylogp = NULL;
+  tnsr_t *o_yt = NULL;
+  tnsr_t *sum = NULL;
+  node_t *node = node_create(g, NULL, a, b, NDTYPE_BINARY_CROSS_ENTROPY_LOSS);
+
+  y_logp = tnsr_emap(NULL, GRPH_NODE_DATA(g, a), ln, NULL);
+  o_ylogp = tnsr_emap(NULL, GRPH_NODE_DATA(g, a), sub_from_1, NULL);
+  REQUIRE(y_logp && o_ylogp, goto error);
+  REQUIRE(tnsr_emap(o_ylogp, o_ylogp, ln, NULL), goto error);
+  o_yt = tnsr_emap(NULL, GRPH_NODE_DATA(g, b), sub_from_1, NULL);
+  REQUIRE(o_yt, goto error);
+
+  REQUIRE(tnsr_emul(o_ylogp, o_ylogp, o_yt), goto error);
+  REQUIRE(tnsr_emul(y_logp, y_logp, GRPH_NODE_DATA(g, b)), goto error);
+
+  REQUIRE(tnsr_eadd(y_logp, y_logp, o_ylogp), goto error);
+  sum = tnsr_sum_over_axis(NULL, y_logp, 1);
+  REQUIRE(sum, goto error);
+  REQUIRE(tnsr_mean(node->data, sum), goto error);
+  REQUIRE(tnsr_emap(node->data, node->data, mul_neg1, NULL), goto error);
+  REQUIRE(node, goto error);
+  tnsr_destroy(&y_logp);
+  tnsr_destroy(&o_ylogp);
+  tnsr_destroy(&o_yt);
+  tnsr_destroy(&sum);
+  return node;
+error:
+  tnsr_destroy(&y_logp);
+  tnsr_destroy(&o_ylogp);
+  tnsr_destroy(&o_yt);
   tnsr_destroy(&sum);
   node_destroy(&node);
   return NULL;
@@ -343,8 +426,8 @@ bool node_eadd_dx(grph_t *g, grph_size_t a) {
   tnsr_t *grad_a_dep0 = GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[0]);
   tnsr_t *grad_a_dep1 = GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[1]);
 
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, GRPH_NODE_GRAD(g, a)), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep1, grad_a_dep1, GRPH_NODE_GRAD(g, a)), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, GRPH_NODE_GRAD(g, a)), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep1, GRPH_NODE_GRAD(g, a)), goto error);
   return true;
 error:
   return false;
@@ -355,10 +438,15 @@ bool node_esub_dx(grph_t *g, grph_size_t a) {
   tnsr_t *grad_a_dep0 = GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[0]);
   tnsr_t *grad_a_dep1 = GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[1]);
 
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, GRPH_NODE_GRAD(g, a)), goto error);
-  REQUIRE(tnsr_esub(grad_a_dep1, grad_a_dep1, GRPH_NODE_GRAD(g, a)), goto error);
+  tnsr_t *negative = tnsr_emap(NULL, GRPH_NODE_GRAD(g, a), mul_neg1, NULL);
+  REQUIRE(negative, goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, GRPH_NODE_GRAD(g, a)), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep1, negative), goto error);
+
+  tnsr_destroy(&negative);
   return true;
 error:
+  tnsr_destroy(&negative);
   return false;
 }
 
@@ -373,8 +461,8 @@ bool node_emul_dx(grph_t *g, grph_size_t a) {
   tnsr_t *dep1_inter = tnsr_emul(NULL, data_a_dep0, GRPH_NODE_GRAD(g, a));
   REQUIRE(dep0_inter && dep1_inter, goto error);
 
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, dep0_inter), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep1, grad_a_dep1, dep1_inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, dep0_inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep1, dep1_inter), goto error);
   tnsr_destroy(&dep0_inter);
   tnsr_destroy(&dep1_inter);
   return true;
@@ -401,8 +489,8 @@ bool node_ediv_dx(grph_t *g, grph_size_t a) {
   REQUIRE(tnsr_emul(dep0_inter, dep0_inter, GRPH_NODE_GRAD(g, a)), goto error);
   REQUIRE(tnsr_emul(dep1_inter, dep1_inter, GRPH_NODE_GRAD(g, a)), goto error);
 
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, dep0_inter), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep1, grad_a_dep1, dep1_inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, dep0_inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep1, dep1_inter), goto error);
   tnsr_destroy(&dep0_inter);
   tnsr_destroy(&dep1_inter);
   return true;
@@ -419,7 +507,7 @@ bool node_esigmoid_dx(grph_t *g, grph_size_t a) {
   tnsr_t *inter = tnsr_emap(NULL, GRPH_NODE_DATA(g, a), sigmoid_odx, NULL);
   REQUIRE(inter, goto error);
   REQUIRE(tnsr_emul(inter, inter, GRPH_NODE_GRAD(g, a)), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, inter), goto error);
   tnsr_destroy(&inter);
   return true;
 error:
@@ -435,7 +523,7 @@ bool node_erelu_dx(grph_t *g, grph_size_t a) {
   tnsr_t *inter = tnsr_emap(NULL, data_a_dep0, relu_dx, NULL);
   REQUIRE(inter, goto error);
   REQUIRE(tnsr_emul(inter, inter, GRPH_NODE_GRAD(g, a)), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, inter), goto error);
   tnsr_destroy(&inter);
   return true;
 error:
@@ -451,7 +539,7 @@ bool node_eleakyrelu_dx(grph_t *g, grph_size_t a) {
   tnsr_t *inter = tnsr_emap(NULL, data_a_dep0, leaky_relu_dx, NULL);
   REQUIRE(inter, goto error);
   REQUIRE(tnsr_emul(inter, inter, GRPH_NODE_GRAD(g, a)), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, inter), goto error);
   tnsr_destroy(&inter);
   return true;
 error:
@@ -472,12 +560,12 @@ bool node_mse_dx(grph_t *g, grph_size_t a) {
   tnsr_t *diff = tnsr_esub(NULL, data_a_dep0, data_a_dep1);
   REQUIRE(diff, goto error);
 
-  tnsr_set(nc, 2.0f / TNSR_SHPE(grad_a_dep0, 1));
+  tnsr_set(nc, 2.0f / TNSR_SHPE(grad_a_dep0, 0));
   REQUIRE(tnsr_emul(diff, diff, nc), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, diff), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, diff), goto error);
   tnsr_set(nc, -1);
   REQUIRE(tnsr_emul(diff, diff, nc), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep1, grad_a_dep1, diff), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep1, diff), goto error);
 
   tnsr_destroy(&diff);
   tnsr_destroy(&nc);
@@ -488,8 +576,9 @@ error:
   return false;
 }
 
-bool node_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
-  ASSERT(g && a != GRPH_NO_INPUT_ID && GRPH_NODE_TYPE(g, a) == NDTYPE_CROSS_ENTROPY_LOSS);
+bool node_categorical_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
+  ASSERT(g && a != GRPH_NO_INPUT_ID);
+  ASSERT(GRPH_NODE_TYPE(g, a) == NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS);
   tnsr_t *grad_a_dep0 = GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[0]);
   tnsr_t *grad_a_dep1 = GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[1]);
   tnsr_t *data_a_dep0 = GRPH_NODE_DATA(g, GRPH_NODE_DEPS(g, a)[0]);
@@ -498,20 +587,73 @@ bool node_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
   tnsr_set(GRPH_NODE_GRAD(g, a), 1);
   tnsr_t *inter = tnsr_create(TNSR_SHPE(data_a_dep1, 0), TNSR_SHPE(data_a_dep1, 1));
   REQUIRE(inter, goto error);
+
   tnsr_set(inter, -1.0f / TNSR_SHPE(data_a_dep0, 0));
   REQUIRE(tnsr_emul(inter, inter, data_a_dep1), goto error);
   REQUIRE(tnsr_ediv(inter, inter, data_a_dep0), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep0, inter), goto error);
 
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, inter), goto error);
+  tnsr_set(inter, -1.0f / TNSR_SHPE(data_a_dep0, 0));
   REQUIRE(tnsr_emap(inter, data_a_dep0, ln, NULL), goto error);
   REQUIRE(tnsr_emap(inter, inter, mul_neg1, NULL), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep1, grad_a_dep1, inter), goto error);
+  REQUIRE(_accumulate_grad(grad_a_dep1, inter), goto error);
 
   tnsr_destroy(&inter);
   return true;
 
 error:
   tnsr_destroy(&inter);
+  return false;
+}
+
+bool node_binary_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
+  ASSERT(g && a != GRPH_NO_INPUT_ID && GRPH_NODE_TYPE(g, a) == NDTYPE_BINARY_CROSS_ENTROPY_LOSS);
+  tnsr_t *y_pred = GRPH_NODE_DATA(g, GRPH_NODE_DEPS(g, a)[0]);
+  tnsr_t *y_true = GRPH_NODE_DATA(g, GRPH_NODE_DEPS(g, a)[1]);
+
+  tnsr_t *y_wrt_pred = NULL;
+  tnsr_t *y_wrt_true = NULL;
+  tnsr_t *inter1 = tnsr_create(TNSR_SHPE(y_pred, 0), TNSR_SHPE(y_pred, 1));
+  tnsr_t *inter2 = tnsr_create(TNSR_SHPE(y_pred, 0), TNSR_SHPE(y_pred, 1));
+  tnsr_set(GRPH_NODE_GRAD(g, a), 1);
+  
+  REQUIRE(inter1 && inter2, goto error);
+
+  y_wrt_pred = tnsr_create(TNSR_SHPE(y_pred, 0), TNSR_SHPE(y_pred, 1));
+  y_wrt_true = tnsr_create(TNSR_SHPE(y_true, 0), TNSR_SHPE(y_true, 1));
+  REQUIRE(y_wrt_pred && y_wrt_true, goto error);
+
+  REQUIRE(tnsr_ediv(y_wrt_pred, y_true, y_pred), goto error);
+  REQUIRE(tnsr_emap(inter1, y_true, sub_from_1, NULL), goto error);
+  REQUIRE(tnsr_emap(inter2, y_pred, sub_from_1, NULL), goto error);
+  REQUIRE(tnsr_ediv(inter1, inter1, inter2), goto error);
+  REQUIRE(tnsr_esub(y_wrt_pred, y_wrt_pred, inter1), goto error);
+
+  REQUIRE(tnsr_emap(inter1, y_pred, ln, NULL), goto error);
+  REQUIRE(tnsr_emap(inter2, y_pred, sub_from_1, NULL), goto error);
+  REQUIRE(tnsr_emap(inter2, inter2, ln, NULL), goto error);
+  REQUIRE(tnsr_esub(y_wrt_true, inter1, inter2), goto error);
+
+  tnsr_set(inter1, -1.0f / TNSR_SHPE(y_pred, 0));
+  REQUIRE(tnsr_emul(y_wrt_pred, y_wrt_pred, inter1), goto error);
+  REQUIRE(tnsr_emul(y_wrt_true, y_wrt_true, inter1), goto error);
+  REQUIRE(tnsr_emul(y_wrt_pred, y_wrt_pred, GRPH_NODE_GRAD(g, a)), goto error);
+  REQUIRE(tnsr_emul(y_wrt_true, y_wrt_true, GRPH_NODE_GRAD(g, a)), goto error);
+
+  REQUIRE(_accumulate_grad(GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[0]), y_wrt_pred), goto error);
+  REQUIRE(_accumulate_grad(GRPH_NODE_GRAD(g, GRPH_NODE_DEPS(g, a)[1]), y_wrt_true), goto error);
+
+  tnsr_destroy(&inter1);
+  tnsr_destroy(&inter2);
+  tnsr_destroy(&y_wrt_pred);
+  tnsr_destroy(&y_wrt_true);
+  return true;
+
+error:
+  tnsr_destroy(&inter1);
+  tnsr_destroy(&inter2);
+  tnsr_destroy(&y_wrt_pred);
+  tnsr_destroy(&y_wrt_true);
   return false;
 }
 
@@ -526,11 +668,11 @@ bool node_softmax_dx(grph_t *g, grph_size_t a) {
   dot = tnsr_sum_over_axis(NULL, inter, 1);
   REQUIRE(dot, goto error);
   sub = tnsr_esub(NULL, GRPH_NODE_GRAD(g, a), dot);
-  
+
   REQUIRE(sub, goto error);
   REQUIRE(tnsr_emul(sub, sub, GRPH_NODE_DATA(g, a)), goto error);
-  REQUIRE(tnsr_eadd(grad_a_dep0, grad_a_dep0, sub), goto error);
-  
+  REQUIRE(_accumulate_grad(grad_a_dep0, sub), goto error);
+
   tnsr_destroy(&inter);
   tnsr_destroy(&dot);
   tnsr_destroy(&sub);
@@ -541,4 +683,3 @@ error:
   tnsr_destroy(&sub);
   return false;
 }
-

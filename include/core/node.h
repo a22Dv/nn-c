@@ -63,9 +63,13 @@ node_t *node_eleakyrelu(grph_t *g, grph_size_t a, grph_size_t b);
 // result in a new node.
 node_t *node_mse(grph_t *g, grph_size_t a, grph_size_t b);
 
-// Applies Cross-Entropy-Loss on A and B and returns the result in a
-// new node.
-node_t *node_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b);
+// Applies Categorical Cross-Entropy-Loss on A and B and 
+// returns the result in a new node.
+node_t *node_categorical_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b);
+
+// Applies  Binary Cross-Entropy-Loss on A and B and 
+// returns the result in a new node.
+node_t *node_binary_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b);
 
 // Applies softmax on A and returns the result in a new node.
 // B must e set to GRPH_NO_INPUT_ID.
@@ -111,9 +115,13 @@ bool node_eleakyrelu_dx(grph_t *g, grph_size_t a);
 // with the upstream gradient stored in A's grad field.
 bool node_mse_dx(grph_t *g, grph_size_t a);
 
-// Pushes the gradient from a Cross-Entropy-Loss node to its dependencies and multiplies it
+// Pushes the gradient from a Categorical Cross-Entropy-Loss node to its dependencies and multiplies it
 // with the upstream gradient stored in A's grad field.
-bool node_cross_entropy_loss_dx(grph_t *g, grph_size_t a);
+bool node_categorical_cross_entropy_loss_dx(grph_t *g, grph_size_t a);
+
+// Pushes the gradient from a Binary Cross-Entropy-Loss node to its dependencies and multiplies it
+// with the upstream gradient stored in A's grad field.
+bool node_binary_cross_entropy_loss_dx(grph_t *g, grph_size_t a);
 
 // Pushes the gradient from a Softmax node to its dependencies and multiplies it
 // with the upstream gradient stored in A's grad field.

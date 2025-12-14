@@ -32,13 +32,11 @@ typedef uint16_t grph_size_t;
 #define GRPH_NODE_NDEP_CPCTY(g, i) ((g)->adj_list[i]->n_deps_capacity)
 #define GRPH_NODE_DEPS(g, i) ((g)->adj_list[i]->dependencies)
 
-
 #define GRPH_CPCTY(g) ((g)->capacity)
 #define GRPH_NODES(g) ((g)->nodes)
 #define GRPH_LIST(g) ((g)->adj_list)
 
 /* ----------------------------------- API ---------------------------------- */
-
 
 typedef enum {
   NDTYPE_DATA,
@@ -52,16 +50,16 @@ typedef enum {
   NDTYPE_ERELU,
   NDTYPE_ELEAKYRELU,
   NDTYPE_MSE,
-  NDTYPE_CROSS_ENTROPY_LOSS,
+  NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS,
+  NDTYPE_BINARY_CROSS_ENTROPY_LOSS, 
   NDTYPE_SOFTMAX,
 } node_type_t;
 
-#define _GRPH_INPUT_TBLE                                                                          \
-  [NDTYPE_DATA] = 0, [NDTYPE_TRANSPOSE] = 1, [NDTYPE_CONTRACT] = 2, [NDTYPE_EADD] = 2,            \
-  [NDTYPE_ESUB] = 2, [NDTYPE_EMUL] = 2, [NDTYPE_EDIV] = 2, [NDTYPE_ESIGMOID] = 1,                 \
-  [NDTYPE_ERELU] = 1, [NDTYPE_ELEAKYRELU] = 1, [NDTYPE_MSE] = 2, [NDTYPE_CROSS_ENTROPY_LOSS] = 2, \
-  [NDTYPE_SOFTMAX] = 1,
-
+#define _GRPH_INPUT_TBLE                                                               \
+  [NDTYPE_DATA] = 0, [NDTYPE_TRANSPOSE] = 1, [NDTYPE_CONTRACT] = 2, [NDTYPE_EADD] = 2, \
+  [NDTYPE_ESUB] = 2, [NDTYPE_EMUL] = 2, [NDTYPE_EDIV] = 2, [NDTYPE_ESIGMOID] = 1,      \
+  [NDTYPE_ERELU] = 1, [NDTYPE_ELEAKYRELU] = 1, [NDTYPE_MSE] = 2,                       \
+  [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = 2, [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = 2, [NDTYPE_SOFTMAX] = 1,
 
 typedef enum {
   OUTSIZE_DEP_ON_A0 = 1,

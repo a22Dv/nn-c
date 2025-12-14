@@ -10,7 +10,9 @@
 
 #include "core/graph.h"
 
-#define DEFAULT_LR 0.05f
+#ifndef DEFAULT_LR
+  #define DEFAULT_LR 0.01f
+#endif
 
 typedef enum {
   OPT_NONE,
@@ -33,7 +35,7 @@ typedef struct dense_layer {
   node_type_t function_type;
   void *optimizer_data;
   bool (*optimizer)(struct dense_layer *);
-  void (*opt_dtor)(void*);
+  void (*opt_dtor)(void *);
 } dense_layer_t;
 
 // Creates a dense layer with the specified characteristics,
@@ -53,9 +55,16 @@ void dense_layer_destroy(dense_layer_t **dl);
 // Adds the layer to the graph.
 bool dense_layer_add_to_graph(grph_t **g, dense_layer_t *dl);
 
+// Resets the layer's graph IDs. Must be called before adding to another instance
+// of the graph.
+void dense_layer_remove_from_graph(dense_layer_t *dl);
+
 // Passes the input through the layer and returns the operation index on the graph.
 grph_size_t dense_layer_passthrough(grph_t **g, dense_layer_t *dl, grph_size_t input);
 
 // Updates the layer through the gradients of its nodes
 // as well as running any optimizers. Modifes node gradients.
 bool dense_layer_update(grph_t **g, dense_layer_t *dl);
+
+// Prints the layer's weights and biases to stdout.
+void dense_layer_dbgprint(dense_layer_t *dl);

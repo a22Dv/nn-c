@@ -288,7 +288,7 @@ void tnsr_dbgprint(tnsr_t *t) {
   ASSERT(t);
   for (tnsr_size_t i = 0; i < TNSR_SHPE(t, 0); ++i) {
     for (tnsr_size_t j = 0; j < TNSR_SHPE(t, 1); ++j) {
-      printf("%.3f ", TNSR_DATA(t, i, j));
+      printf("%+.3f ", TNSR_DATA(t, i, j));
     }
     printf("\n");
   }

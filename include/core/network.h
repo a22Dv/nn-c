@@ -4,21 +4,20 @@
  * BRIEF:
  * Declarations for layer type
  * structs and their functions.
+ * 
+ * TODO:
+ * Implement optimizers.
  */
 
 #pragma once
 
 #include "core/graph.h"
 
-#ifndef DEFAULT_LR
-  #define DEFAULT_LR 0.01f
-#endif
-
 typedef enum {
-  OPT_NONE,
-  OPT_ADAM,
-  OPT_RMS_PROP,
-  OPT_MOMENTUM
+  OPT_SGD,
+  OPT_SGD_MOMENTUM,
+  OPT_SGD_RMS_PROP,
+  OPT_SGD_ADAM,
 } optimizer_t;
 
 typedef enum {
@@ -68,3 +67,15 @@ bool dense_layer_update(grph_t **g, dense_layer_t *dl);
 
 // Prints the layer's weights and biases to stdout.
 void dense_layer_dbgprint(dense_layer_t *dl);
+
+// Default stochastic gradient descent.
+bool dense_layer_sgd(dense_layer_t *dl);
+
+// Stochastic gradient descent with momentum.
+bool dense_layer_sgd_momentum(dense_layer_t *dl);
+
+// Stochastic gradient descent with Root Mean Square Propagation.
+bool dense_layer_sgd_rms_prop(dense_layer_t *dl);
+
+// Stochastic gradient descent with Adaptive Moment Estimation.
+bool dense_layer_sgd_adam(dense_layer_t *dl);

@@ -23,6 +23,7 @@ static node_t *(*node_functions[])(grph_t *, grph_size_t, grph_size_t) = {
     [NDTYPE_ESIGMOID] = node_esigmoid,
     [NDTYPE_ERELU] = node_erelu,
     [NDTYPE_ELEAKYRELU] = node_eleakyrelu,
+    [NDTYPE_ETANH] = node_etanh,
     [NDTYPE_MSE] = node_mse,
     [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = node_categorical_cross_entropy_loss,
     [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = node_binary_cross_entropy_loss,
@@ -39,6 +40,7 @@ static bool (*node_functions_dx[])(grph_t *, grph_size_t) = {
     [NDTYPE_ESIGMOID] = node_esigmoid_dx,
     [NDTYPE_ERELU] = node_erelu_dx,
     [NDTYPE_ELEAKYRELU] = node_eleakyrelu_dx,
+    [NDTYPE_ETANH] = node_etanh_dx,
     [NDTYPE_MSE] = node_mse_dx,
     [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = node_categorical_cross_entropy_loss_dx,
     [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = node_binary_cross_entropy_loss_dx,
@@ -58,7 +60,7 @@ static bool topological_sort(
   visited[n] = ND_VISITING;
   for (grph_size_t i = 0; i < GRPH_NODE_NDEP(g, n); ++i) {
     const grph_size_t node_id = GRPH_NODE_DEPS(g, n)[i];
-    REQUIRE(visited[node_id] != ND_VISITING, goto error);
+    ASSERT(visited[node_id] != ND_VISITING);
     if (visited[node_id] == ND_VISITED) {
       continue;
     }

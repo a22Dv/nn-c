@@ -21,7 +21,6 @@ typedef struct node {
   grph_size_t dependencies[];
 } node_t;
 
-
 // Creates the appropriate node based on the node type.
 node_t *node_create(grph_t *g, tnsr_t *data, grph_size_t a, grph_size_t b, node_type_t type);
 
@@ -75,6 +74,10 @@ node_t *node_binary_cross_entropy_loss(grph_t *g, grph_size_t a, grph_size_t b);
 // B must e set to GRPH_NO_INPUT_ID.
 node_t *node_softmax(grph_t *g, grph_size_t a, grph_size_t b);
 
+// Applies tanh on A and returns the result
+// in a new node. B must be set to GRPH_NO_INPUT_ID.
+node_t *node_etanh(grph_t *g, grph_size_t a, grph_size_t b);
+
 // Pushes the gradient from a transpose node to its dependencies and multiplies it
 // with the upstream gradient stored in A's grad field.
 bool node_transpose_dx(grph_t *g, grph_size_t a);
@@ -126,3 +129,7 @@ bool node_binary_cross_entropy_loss_dx(grph_t *g, grph_size_t a);
 // Pushes the gradient from a Softmax node to its dependencies and multiplies it
 // with the upstream gradient stored in A's grad field.
 bool node_softmax_dx(grph_t *g, grph_size_t a);
+
+// Pushes the gradient from a tanh node to its dependencies and multiplies it with the 
+// upstream gradient stored in A's grad field.
+bool node_etanh_dx(grph_t *g, grph_size_t a);

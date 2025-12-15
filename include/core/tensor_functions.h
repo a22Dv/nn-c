@@ -19,97 +19,157 @@ typedef struct {
   int fan_in;
 } he_ctx_t;
 
-FRCINL tnsr_type_t pow_2(tnsr_type_t x, void *ctx) {
-  (void)ctx;
-  return x * x;
+typedef struct {
+  tnsr_type_t n;
+} gen_ctx_t;
+
+// Returns the result for powf(x, n);
+FRCINL tnsr_type_t tnsr_powf(tnsr_type_t x, void *ctx) { 
+  ASSERT(ctx); 
+  return powf(x, ((gen_ctx_t*)ctx)->n);
 }
 
-FRCINL tnsr_type_t pow_neg1(tnsr_type_t x, void *ctx) {
-  (void)ctx;
-  return 1 / x;
-}
-
-FRCINL tnsr_type_t pow_neg2(tnsr_type_t x, void *ctx) {
-  (void)ctx;
-  return 1 / (x * x);
-}
-
-FRCINL tnsr_type_t sigmoid(tnsr_type_t x, void *ctx) {
+// Returns the value of the sigmoid function at x.
+FRCINL tnsr_type_t tnsr_sigmoid(tnsr_type_t x, void *ctx) {
   (void)ctx;
   return 1 / (1 + exp(-x));
 }
 
-FRCINL tnsr_type_t relu(tnsr_type_t x, void *ctx) {
+// Returns the result of tanhf(x).
+FRCINL tnsr_type_t tnsr_tanh(tnsr_type_t x, void *ctx) {
   (void)ctx;
-  return max(0, x);
+  return tanhf(x);
 }
 
-FRCINL tnsr_type_t leaky_relu(tnsr_type_t x, void *ctx) {
+// Returns the value of the ReLU function at x.
+FRCINL tnsr_type_t tnsr_relu(tnsr_type_t x, void *ctx) {
   (void)ctx;
-  return x < 0 ? 0.01 * x : x;
+  return x < 0 ? 0 : x;
 }
 
-FRCINL tnsr_type_t sigmoid_dx(tnsr_type_t x, void *ctx) {
+// Returns the value of the Leaky ReLU function at x.
+// Note that this function uses the context pointer as the alpha value.
+// Such that calculating the derivative of this function requires the same alpha value to 
+// be called with.
+FRCINL tnsr_type_t tnsr_leaky_relu(tnsr_type_t x, void *ctx) {  
+  ASSERT(ctx);
+  return x < 0 ? ((gen_ctx_t*)ctx)->n * x : x;
+}
+
+// Returns the value of the derivative of the sigmoid function at x.
+FRCINL tnsr_type_t tnsr_sigmoid_dx(tnsr_type_t x, void *ctx) {
   (void)ctx;
   tnsr_type_t ex = expf(-x);
   return ex / ((1 + ex) * (1 + ex));
 }
 
-FRCINL tnsr_type_t sigmoid_odx(tnsr_type_t ox, void *ctx) {
+// Returns the value of the derivative of the sigmoid function at x.
+// Note that x is assumed to be the output of the previous sigmoid function.
+FRCINL tnsr_type_t tnsr_sigmoid_odx(tnsr_type_t x, void *ctx) {
   (void)ctx;
-  return ox * (1 - ox);
+  return x * (1 - x);
 }
 
-FRCINL tnsr_type_t relu_dx(tnsr_type_t x, void *ctx) {
+// Returns the derivative of the ReLU function at x.
+FRCINL tnsr_type_t tnsr_relu_dx(tnsr_type_t x, void *ctx) {
   (void)ctx;
   return x > 0;
 }
 
-FRCINL tnsr_type_t leaky_relu_dx(tnsr_type_t x, void *ctx) {
+// Returns the derivative of the tanh function at x. 
+FRCINL tnsr_type_t tnsr_tanh_dx(tnsr_type_t x, void *ctx) {
   (void)ctx;
-  return x > 0 ? 1 : 0.01;
+  const tnsr_type_t tanhx = tanhf(x);
+  return 1 - (tanhx * tanhx);
 }
 
-FRCINL tnsr_type_t rand_uniform(tnsr_type_t x, void *ctx) {
+// Returns the derivative of the tanh function at x. 
+// Note that x is assumed to be the output of the tanh function.
+FRCINL tnsr_type_t tnsr_tanh_odx(tnsr_type_t x, void *ctx) {
   (void)ctx;
+  return 1 - (x * x);
+}
+
+// Returns the derivative of the Leaky ReLU function at x.
+// Note that this function is highly dependent on the context given, and must
+// be given the same value that the non-dx function has been called with to prevent 
+// garbage output.
+FRCINL tnsr_type_t tnsr_leaky_relu_dx(tnsr_type_t x, void *ctx) {
+  (void)ctx;
+  return x < 0 ? ((gen_ctx_t*)ctx)->n: 1;
+}
+
+// Returns a random number based on C's stdlib rand(). Passing a non-zero x
+// offsets the range from [-1 -> 1] to [-1 + x -> 1 + x].
+FRCINL tnsr_type_t tnsr_rand_uniform(tnsr_type_t x, void *ctx) {
   (void)x;
-  return (((tnsr_type_t)(rand()) / RAND_MAX) - 0.5f) * 2.0f;  // Range [-1.0-1.0]
+  return ((((tnsr_type_t)(rand()) / RAND_MAX) - 0.5f) * 2.0f) + ((gen_ctx_t*)ctx)->n;
 }
 
-FRCINL tnsr_type_t glorot(tnsr_type_t x, void *ctx) {
+// Uses the uniform variation for Glorot initialization.
+FRCINL tnsr_type_t tnsr_glorot(tnsr_type_t x, void *ctx) {
   ASSERT(ctx);
+  (void)x;
   glorot_ctx_t *gctx = ctx;
-  return rand_uniform(x, NULL) * sqrt(6.0f / (gctx->fan_in + gctx->fan_out));
+  gen_ctx_t rand_ctx = {0};
+  return tnsr_rand_uniform(0, &rand_ctx) * sqrtf(6.0f / (gctx->fan_in + gctx->fan_out));
 }
 
-FRCINL tnsr_type_t he(tnsr_type_t x, void *ctx) {
+// Uses the uniform variation for He initialization.
+FRCINL tnsr_type_t tnsr_he(tnsr_type_t x, void *ctx) {
   ASSERT(ctx);
   he_ctx_t *hctx = ctx;
-  return rand_uniform(x, NULL) * sqrt(6.0f / (hctx->fan_in));
+  gen_ctx_t rand_ctx = {0};
+  return tnsr_rand_uniform(x, &rand_ctx) * sqrtf(6.0f / (hctx->fan_in));
 }
 
-FRCINL tnsr_type_t euler(tnsr_type_t x, void *ctx) {
+// Returns the value of expf(x).
+FRCINL tnsr_type_t tnsr_expf(tnsr_type_t x, void *ctx) {
   (void)ctx;
   return expf(x);
 }
 
-FRCINL tnsr_type_t ln(tnsr_type_t x, void *ctx) {
+// Returns the value of logf(x) (natural logarithm).
+FRCINL tnsr_type_t tnsr_ln(tnsr_type_t x, void *ctx) {
   (void)ctx;
   return logf(x);
 }
 
-FRCINL tnsr_type_t mul_neg1(tnsr_type_t x, void *ctx) {
-  (void)ctx;
-  return -x;
+// Returns the value of x multiplied by n. 
+FRCINL tnsr_type_t tnsr_mul_n(tnsr_type_t x, void *ctx) {
+  ASSERT(ctx);
+  return x * ((gen_ctx_t*)ctx)->n;
 }
 
-FRCINL tnsr_type_t add_1(tnsr_type_t x, void *ctx) {
-  (void)ctx;
-  return x + 1;
+// Returns the value of x added by n.
+FRCINL tnsr_type_t tnsr_add_n(tnsr_type_t x, void *ctx) {
+  ASSERT(ctx);
+  return x + ((gen_ctx_t*)ctx)->n;
 }
 
-FRCINL tnsr_type_t sub_from_1(tnsr_type_t x, void *ctx) {
-  (void)ctx;
-  return 1 - x;
+// Returns the value of n - x, where x acts as the subtrahend. 
+FRCINL tnsr_type_t tnsr_as_subtrahend(tnsr_type_t x, void *ctx) {
+  ASSERT(ctx);
+  return ((gen_ctx_t*)ctx)->n - x;
 }
+
+// Returns the value of x - n, where x acts as the minuend.
+FRCINL tnsr_type_t tnsr_as_minuend(tnsr_type_t x, void *ctx) {
+  ASSERT(ctx);
+  return x - ((gen_ctx_t*)ctx)->n;
+}
+
+// Returns the value of x / n, where x acts as the minuend.
+FRCINL tnsr_type_t tnsr_as_dividend(tnsr_type_t x, void *ctx) {
+  ASSERT(ctx);
+  return x / ((gen_ctx_t*)ctx)->n;
+}
+
+// Returns the value of n / x, where x acts as the divisor.
+FRCINL tnsr_type_t tnsr_as_divisor(tnsr_type_t x, void *ctx) {
+  ASSERT(ctx);
+  return ((gen_ctx_t*)ctx)->n / x;
+}
+
+
 

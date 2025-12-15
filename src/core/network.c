@@ -29,7 +29,10 @@ dense_layer_t *dense_layer_create(
   layer->biases_id = GRPH_NO_INPUT_ID;
 
   switch (optimizer) {  /// TODO: Implement optimizers.
-    case OPT_NONE:
+    case OPT_SGD:
+    case OPT_SGD_MOMENTUM:
+    case OPT_SGD_RMS_PROP:
+    case OPT_SGD_ADAM:
     default:
       layer->optimizer = NULL;
       layer->optimizer_data = NULL;
@@ -39,17 +42,18 @@ dense_layer_t *dense_layer_create(
   switch (init) {
     case INIT_HE:
       he_ctx_t he_ctx = (he_ctx_t){fan_in};
-      REQUIRE(tnsr_emap(layer->weights, layer->weights, he, &he_ctx), goto error);
-      REQUIRE(tnsr_emap(layer->biases, layer->biases, he, &he_ctx), goto error);
+      REQUIRE(tnsr_emap(layer->weights, layer->weights, tnsr_he, &he_ctx), goto error);
+      REQUIRE(tnsr_emap(layer->biases, layer->biases, tnsr_he, &he_ctx), goto error);
       break;
     case INIT_GLOROT:
       glorot_ctx_t glorot_ctx = (glorot_ctx_t){fan_in, fan_out};
-      REQUIRE(tnsr_emap(layer->weights, layer->weights, glorot, &glorot_ctx), goto error);
-      REQUIRE(tnsr_emap(layer->biases, layer->biases, glorot, &glorot_ctx), goto error);
+      REQUIRE(tnsr_emap(layer->weights, layer->weights, tnsr_glorot, &glorot_ctx), goto error);
+      REQUIRE(tnsr_emap(layer->biases, layer->biases, tnsr_glorot, &glorot_ctx), goto error);
       break;
     case INIT_RANDOM_UNIFORM:
-      REQUIRE(tnsr_emap(layer->weights, layer->weights, rand_uniform, NULL), goto error);
-      REQUIRE(tnsr_emap(layer->biases, layer->biases, rand_uniform, NULL), goto error);
+      gen_ctx_t rand_ctx = {0}; // No offset.
+      REQUIRE(tnsr_emap(layer->weights, layer->weights, tnsr_rand_uniform, &rand_ctx), goto error);
+      REQUIRE(tnsr_emap(layer->biases, layer->biases, tnsr_rand_uniform, &rand_ctx), goto error);
       break;
   }
 
@@ -101,6 +105,7 @@ grph_size_t dense_layer_passthrough(grph_t **g, dense_layer_t *dl, grph_size_t i
     case NDTYPE_ELEAKYRELU:
     case NDTYPE_ERELU:
     case NDTYPE_ESIGMOID:
+    case NDTYPE_ETANH:
     case NDTYPE_SOFTMAX:
       nd = grph_execute(g, nd, GRPH_NO_INPUT_ID, dl->function_type);
       REQUIRE(nd, goto error);
@@ -120,7 +125,7 @@ bool dense_layer_update(grph_t **g, dense_layer_t *dl) {
   if (!dl->optimizer) {
     ml = TNSR_SCALAR();
     REQUIRE(ml, goto error);
-    tnsr_set(ml, -DEFAULT_LR);
+    tnsr_set(ml, -0.05); // Fixed. Change to variable later.
     tnsr_t *wgrad = GRPH_NODE_GRAD(*g, dl->weights_id);
     tnsr_t *bgrad = GRPH_NODE_GRAD(*g, dl->biases_id);
     REQUIRE(tnsr_emul(wgrad, wgrad, ml), goto error);

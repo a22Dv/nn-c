@@ -64,13 +64,13 @@ tnsr_t *tnsr_contract(tnsr_t *restrict dst, const tnsr_t *restrict a, const tnsr
 tnsr_t *tnsr_eadd(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b);
 
 // Tensor element-wise subtraction.
-tnsr_t *tnsr_esub(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b);
+tnsr_t *tnsr_esub(tnsr_t *dst, const tnsr_t *a, const tnsr_t *b);
 
 // Tensor element-wise multiplication.
 tnsr_t *tnsr_emul(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b);
 
 // Tensor element-wise division.
-tnsr_t *tnsr_ediv(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b);
+tnsr_t *tnsr_ediv(tnsr_t *dst, const tnsr_t *a, const tnsr_t *b);
 
 // Tensor element-wise function mapping.
 tnsr_t *tnsr_emap(

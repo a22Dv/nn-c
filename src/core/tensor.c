@@ -133,7 +133,7 @@ tnsr_t *tnsr_eadd(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
   _TNSR_EIMPL(dst, a, +, b);
 }
 
-tnsr_t *tnsr_esub(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
+tnsr_t *tnsr_esub(tnsr_t *dst, const tnsr_t *a, const tnsr_t *b) {
   _TNSR_EIMPL(dst, a, -, b);
 }
 
@@ -141,7 +141,7 @@ tnsr_t *tnsr_emul(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
   _TNSR_EIMPL(dst, a, *, b);
 }
 
-tnsr_t *tnsr_ediv(tnsr_t *dst, const tnsr_t *a, const tnsr_t *restrict b) {
+tnsr_t *tnsr_ediv(tnsr_t *dst, const tnsr_t *a, const tnsr_t *b) {
   _TNSR_EIMPL(dst, a, /, b);
 }
 

@@ -46,6 +46,12 @@ int main() {
   return xor_model_indiv();
 }
 
+/**
+ * NOTE:
+ * Extremely sensitive to initialization conditions.
+ * Possibility of getting stuck due to gradients cancelling each other out
+ * across the full batch due to the XOR problem being "symmetrical."
+ */
 int xor_model_batched() {
   tnsr_type_t inputr[] = {0, 0, 0, 1, 1, 0, 1, 1};
   tnsr_type_t expectedr[] = {0, 1, 1, 0};
@@ -54,8 +60,8 @@ int xor_model_batched() {
   tnsr_t *expected = TNSR_COLVEC(4);
   TNSR_FROM_ARRAY(expected, expectedr);
   dense_layer_t *layers[] = {
-      dense_layer_create(2, 4, INIT_GLOROT, NDTYPE_ELEAKYRELU, OPT_SGD),
-      dense_layer_create(4, 1, INIT_HE, NDTYPE_ELEAKYRELU, OPT_SGD),
+      dense_layer_create(2, 2, INIT_GLOROT, NDTYPE_ELEAKYRELU, OPT_SGD_ADAM, 0.05f),
+      dense_layer_create(2, 1, INIT_HE, NDTYPE_ELEAKYRELU, OPT_SGD_ADAM, 0.05f),
   };
   const size_t nlayers = sizeof(layers) / sizeof(dense_layer_t *);
   const size_t epochs = 10000;
@@ -70,8 +76,13 @@ int xor_model_batched() {
     for (size_t i = 0; i < nlayers; ++i) {
       n = dense_layer_passthrough(&graph, layers[i], n);
     }
-    n = grph_execute(&graph, n, m, NDTYPE_BINARY_CROSS_ENTROPY_LOSS);
+    n = grph_execute(&graph, n, m, NDTYPE_MSE);
     grph_trace(graph);
+    if (passes % 11 == 0) {
+      DBGPRINT_BATCHED
+      printf("\033[H");
+      Sleep(100);
+    }
     for (size_t i = 0; i < nlayers; ++i) {
       dense_layer_update(&graph, layers[i]);
     }
@@ -86,7 +97,7 @@ int xor_model_batched() {
 }
 
 // 2-2-1. XOR demo prototype. Individual no-batch.
-// Converges ~500 epochs with LR=0.05
+// Converges ~300 epochs with LR=0.05
 int xor_model_indiv() {
   tnsr_type_t inputs_raw[][2] = {{0, 0}, {0, 1}, {1, 0}, {1, 1}};
   tnsr_type_t expected_raw[][1] = {{0}, {1}, {1}, {0}};
@@ -107,8 +118,8 @@ int xor_model_indiv() {
     TNSR_FROM_ARRAY(expected[i], expected_raw[i]);
   }
   dense_layer_t *layers[] = {
-      dense_layer_create(2, 4, INIT_HE, NDTYPE_ELEAKYRELU, OPT_SGD),
-      dense_layer_create(4, 1, INIT_HE, NDTYPE_ELEAKYRELU, OPT_SGD),
+      dense_layer_create(2, 2, INIT_HE, NDTYPE_ELEAKYRELU, OPT_SGD_ADAM, 0.1),
+      dense_layer_create(2, 1, INIT_HE, NDTYPE_ELEAKYRELU, OPT_SGD_ADAM, 0.1),
   };
   const size_t nlayers = sizeof(layers) / sizeof(dense_layer_t *);
   const size_t epochs = 100000;
@@ -125,14 +136,8 @@ int xor_model_indiv() {
     for (size_t i = 0; i < nlayers; ++i) {
       n = dense_layer_passthrough(&graph, layers[i], n);
     }
-
     n = grph_execute(&graph, n, m, NDTYPE_MSE);
     grph_trace(graph);
-    if (passes % 1001 == 0) {
-      DBGPRINT_INDIV
-      printf("\033[H");
-      Sleep(100);
-    }
     for (size_t i = 0; i < nlayers; ++i) {
       dense_layer_update(&graph, layers[i]);
     }

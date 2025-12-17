@@ -640,7 +640,7 @@ bool node_binary_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
   y_wrt_true = tnsr_create(TNSR_SHPE(y_true, 0), TNSR_SHPE(y_true, 1));
   REQUIRE(y_wrt_pred && y_wrt_true, goto error);
 
-  gen_ctx_t ctx = {1};
+  gen_ctx_t ctx = {1}; 
   REQUIRE(tnsr_ediv(y_wrt_pred, y_true, y_pred), goto error);
   REQUIRE(tnsr_emap(inter1, y_true, tnsr_as_subtrahend, &ctx), goto error);
   REQUIRE(tnsr_emap(inter2, y_pred, tnsr_as_subtrahend, &ctx), goto error);

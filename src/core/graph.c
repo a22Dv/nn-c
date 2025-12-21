@@ -11,6 +11,7 @@
 #include "core/node.h"
 #include "utils/utils.h"
 
+
 static grph_size_t input_req[] = {_GRPH_INPUT_TBLE};
 
 static node_t *(*node_functions[])(grph_t *, grph_size_t, grph_size_t) = {
@@ -130,7 +131,9 @@ error:
 }
 
 void grph_destroy(grph_t **g) {
-  REQUIRE(g && *g, return);
+  if (!g || !*g) {
+    return;
+  }
   grph_t *graph = *g;
   for (grph_size_t i = 0; i < GRPH_NODES(graph); ++i) {
     if (GRPH_NODE_TRANSIENT(graph, i)) {
@@ -166,6 +169,7 @@ error:
 
 grph_size_t grph_execute(grph_t **g, grph_size_t a, grph_size_t b, node_type_t ntype) {
   ASSERT(g && *g && ntype != NDTYPE_DATA);
+  (void)input_req;
   ASSERT((a != GRPH_NO_INPUT_ID) + (b != GRPH_NO_INPUT_ID) == input_req[ntype]);
   ASSERT((input_req[ntype] == 1 ? a != GRPH_NO_INPUT_ID : true));
 

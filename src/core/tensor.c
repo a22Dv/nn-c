@@ -8,9 +8,9 @@
  * Assumes TNSR_MAX_RANK is 2.
  */
 
+#include <float.h>
 #include <stdbool.h>
 #include <stdlib.h>
-#include <float.h>
 
 #include "core/tensor.h"
 #include "utils/utils.h"
@@ -20,7 +20,7 @@
     ASSERT(a && b);                                                                         \
                                                                                             \
     tnsr_size_t bstrd[TNSR_MAX_RANK] = {};                                                  \
-    ASSERT(b_broadcast_to_a(a, b, bstrd));                                                  \
+    REQUIRE(b_broadcast_to_a(a, b, bstrd), goto error);                                     \
                                                                                             \
     tnsr_t *rloc = dst;                                                                     \
     if (!rloc) {                                                                            \
@@ -75,7 +75,9 @@ error:
 }
 
 void tnsr_destroy(tnsr_t **t) {
-  REQUIRE(t && *t, return);
+  if (!t || !*t) {
+    return;
+  }
   free(*t);
   *t = NULL;
 }
@@ -210,7 +212,7 @@ tnsr_t *tnsr_sum_over_axis(tnsr_t *restrict dst, tnsr_t *restrict t, tnsr_size_t
   const tnsr_size_t p = axis ? TNSR_SHPE(t, 0) : TNSR_SHPE(t, 1);
   const tnsr_size_t q = axis ? TNSR_SHPE(t, 1) : TNSR_SHPE(t, 0);
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (tnsr_size_t i = 0; i < p; ++i) {
     tnsr_type_t si = 0;
     for (tnsr_size_t j = 0; j < q; ++j) {
@@ -243,7 +245,7 @@ tnsr_t *tnsr_max_over_axis(tnsr_t *restrict dst, tnsr_t *restrict t, tnsr_size_t
   const tnsr_size_t p = axis ? TNSR_SHPE(t, 0) : TNSR_SHPE(t, 1);
   const tnsr_size_t q = axis ? TNSR_SHPE(t, 1) : TNSR_SHPE(t, 0);
 
-  #pragma omp parallel for
+#pragma omp parallel for
   for (tnsr_size_t i = 0; i < p; ++i) {
     tnsr_type_t maxi = -FLT_MAX;
     for (tnsr_size_t j = 0; j < q; ++j) {
@@ -263,7 +265,7 @@ error:
 
 tnsr_t *tnsr_mean(tnsr_t *dst, tnsr_t *t) {
   ASSERT(t);
-  
+
   tnsr_t *avg = dst;
   if (!avg) {
     avg = TNSR_SCALAR();
@@ -284,7 +286,7 @@ error:
   return NULL;
 }
 
-void tnsr_dbgprint(tnsr_t *t) {
+void tnsr_dbgprint(const tnsr_t *t) {
   ASSERT(t);
   for (tnsr_size_t i = 0; i < TNSR_SHPE(t, 0); ++i) {
     for (tnsr_size_t j = 0; j < TNSR_SHPE(t, 1); ++j) {

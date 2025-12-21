@@ -1,2 +1,5 @@
 build/
 .vscode/
+data/
+mnist.weights
+mnist32.weights

@@ -90,4 +90,4 @@ tnsr_t *tnsr_max_over_axis(tnsr_t *restrict dst, tnsr_t *restrict t, tnsr_size_t
 tnsr_t *tnsr_mean(tnsr_t *restrict dst, tnsr_t *restrict t);
 
 // Prints the tensor to stdout.
-void tnsr_dbgprint(tnsr_t *t);
+void tnsr_dbgprint(const tnsr_t *t);

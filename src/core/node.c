@@ -622,7 +622,7 @@ error:
   return false;
 }
 
-/// BUG: Possible NaN during ln(0). Fix later.
+/// BUG: Possible NaN during ln(0).
 bool node_binary_cross_entropy_loss_dx(grph_t *g, grph_size_t a) {
   ASSERT(g && a != GRPH_NO_INPUT_ID && GRPH_NODE_TYPE(g, a) == NDTYPE_BINARY_CROSS_ENTROPY_LOSS);
   tnsr_t *y_pred = GRPH_NODE_DATA(g, GRPH_NODE_DEPS(g, a)[0]);

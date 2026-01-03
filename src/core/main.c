@@ -2,6 +2,8 @@
  * main.c
  *
  * MNIST demo.
+ * Converges ~3 epochs.
+ * 92-95% accuracy
  */
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -114,7 +116,7 @@ int main() {
 
   dashboard_config_t dash = {
       .show_dashboard = true,
-      .passes_interval = 1024,  // Show dashboard every 4096 mini-batches.
+      .passes_interval = 1024,  // Show dashboard every 1024 mini-batches.
       .dashboard_callback = mnist_dash
   };
   layer_config_t layers[] = {

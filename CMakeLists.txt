@@ -21,6 +21,9 @@ set_property(DIRECTORY PROPERTY CMAKE_CONFIGURE_DEPENDS
 set(PROJECT_NAME nn_c)
 set(PROJECT_LANGUAGE C)
 set(PROJECT_STANDARD 17)
+enable_language(C)
+
+find_package(OpenMP REQUIRED)
 
 if (PROJECT_LANGUAGE STREQUAL "CXX")
     set(CMAKE_CXX_STANDARD ${PROJECT_STANDARD})
@@ -37,7 +40,7 @@ add_executable(${PROJECT_NAME})
 file(GLOB_RECURSE SOURCES "${CMAKE_SOURCE_DIR}/src/*.c")
 target_sources(${PROJECT_NAME} PRIVATE ${SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
-target_link_libraries(${PROJECT_NAME} PRIVATE) # No-op by default.
+target_link_libraries(${PROJECT_NAME} PRIVATE OpenMP::OpenMP_C) # No-op by default.
 
 # Compile definitions/options
 set(BASE_COMPILE_OPTIONS /WX /W4) 

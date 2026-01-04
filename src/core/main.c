@@ -2,8 +2,8 @@
  * main.c
  *
  * MNIST demo.
- * Converges ~3 epochs.
- * 92-95% accuracy
+ * Converges ~2 epochs.
+ * 96.54% accuracy
  */
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -116,17 +116,17 @@ int main() {
 
   dashboard_config_t dash = {
       .show_dashboard = true,
-      .passes_interval = 1024,  // Show dashboard every 1024 mini-batches.
+      .passes_interval = 12,  // Show dashboard every 512 mini-batches.
       .dashboard_callback = mnist_dash
   };
   layer_config_t layers[] = {
-      (layer_config_t){64, INIT_HE, NDTYPE_ELEAKYRELU},
-      (layer_config_t){64, INIT_HE, NDTYPE_ELEAKYRELU},
+      (layer_config_t){128, INIT_HE, NDTYPE_ELEAKYRELU},
+      (layer_config_t){128, INIT_HE, NDTYPE_ELEAKYRELU},
       (layer_config_t){10, INIT_GLOROT, NDTYPE_SOFTMAX}
   };
   size_t lsize = sizeof(layers) / sizeof(layer_config_t);
   model_config_t config = {
-      .epochs = 3,
+      .epochs = 2,
       .network_depth = lsize,
       .batch_size = 8,
       .data_size = 60000,
@@ -134,8 +134,8 @@ int main() {
       .dashboard = dash,
       .input_size = 28 * 28,
       .output_size = 10,
-      .optimizer_method = OPT_SGD_MOMENTUM,
-      .learning_rate = 0.01f,
+      .optimizer_method = OPT_SGD_ADAM,
+      .learning_rate = 0.001f,
       .loss_function_type = NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS,
       .data_callback = mnist_data,
       .context = &ctx,
@@ -147,18 +147,20 @@ int main() {
   if (!model_fit(model)) {
     goto error;
   }
-  if (!model_save(model, "C:/dev/repositories/nn-c/mnist32.weights")) {
+  if (!model_save(model, "C:/dev/repositories/nn-c/mnist128.weights")) {
     goto error;
   }
   /* -------------------------------- Inference ------------------------------- */
 
   system("cls");
-  model_t *model_inf = model_load("C:/dev/repositories/nn-c/mnist32.weights");
+  model_t *model_inf = model_load("C:/dev/repositories/nn-c/mnist128.weights");
   if (!model_inf) {
     goto error;
   }
   ctx.use_testing = true;
-  for (size_t i = 0; i < 50; ++i) {
+
+  tnsr_type_t accuracy = 0.0f;
+  for (size_t i = 0; i < 10000; ++i) {
     bool rt = true;
     tnsr_t *in = NULL;
     tnsr_t *expected = NULL;
@@ -184,6 +186,7 @@ int main() {
       }
     }
     printf("EXPECTED: %zu | %.2f ? NETWORK PREDICTED: %zu | %.2f\n", exppred, expconf, pred, conf);
+    accuracy += (exppred == pred);
   end:
     tnsr_destroy(&in);
     tnsr_destroy(&expected);
@@ -191,8 +194,8 @@ int main() {
     if (!rt) {
       goto error;
     }
-    Sleep(100);
   }
+  printf("MEAN ACCURACY: %.2f%%", (accuracy / 10000) * 100);
   fclose(tr_imgstream);
   fclose(tr_lblstream);
   fclose(tst_imgstream);

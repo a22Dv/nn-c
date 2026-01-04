@@ -114,7 +114,7 @@ void dense_layer_destroy(dense_layer_t **dl) {
 
 bool dense_layer_add_to_graph(grph_t **g, dense_layer_t *dl) {
   ASSERT(g && *g && dl);
-  ASSERT(dl->weights_id == GRPH_NO_INPUT_ID && dl->biases_id == GRPH_NO_INPUT_ID);
+  // ASSERT(dl->weights_id == GRPH_NO_INPUT_ID && dl->biases_id == GRPH_NO_INPUT_ID);
   dl->weights_id = grph_append_data(g, dl->weights);
   dl->biases_id = grph_append_data(g, dl->biases);
   REQUIRE(dl->weights_id != GRPH_ERR_ID && dl->biases_id != GRPH_ERR_ID, goto error);

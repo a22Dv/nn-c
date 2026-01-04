@@ -46,7 +46,7 @@ static bool (*node_functions_dx[])(grph_t *, grph_size_t) = {
     [NDTYPE_CATEGORICAL_CROSS_ENTROPY_LOSS] = node_categorical_cross_entropy_loss_dx,
     [NDTYPE_BINARY_CROSS_ENTROPY_LOSS] = node_binary_cross_entropy_loss_dx,
     [NDTYPE_SOFTMAX] = node_softmax_dx,
-};
+}; 
 
 typedef enum {
   ND_NOT_VISITED,

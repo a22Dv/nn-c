@@ -2,7 +2,10 @@
 ![Language](https://img.shields.io/badge/C%2D17-blue?logo=c&logoColor=white)
 ![MIT License](https://img.shields.io/badge/License-MIT-green)
 
-![Demo](./public/demo-mnist-128x128x10.gif)
+
+|![Demo](./public/demo-mnist-128x128x10.gif)|
+|---|
+
 A mini neural network framework built entirely in C.
 
 This framework is built using only the C standard library (Along with Windows-specific headers for console handling)
